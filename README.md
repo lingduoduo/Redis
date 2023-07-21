@@ -11,7 +11,9 @@ redis-cli -h ip -p port ping
 
 - redis-server
 ```
+redis-server
 redis-server --port 6380
+redis-server configPath
 ```
 - redis-cli
 - redis-benchmark
