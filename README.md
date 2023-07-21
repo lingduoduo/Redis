@@ -30,7 +30,10 @@ redis-cli -h 10.10.79.150 -p 6384
 - redis-check-dump
 - redis-sentinel
 
+```
+config get *
 - daemonize
 - port 6379
 - logfile
 - dir
+```
