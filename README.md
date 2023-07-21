@@ -3,6 +3,9 @@
 ```
 brew update
 brew install redis
+
+ps -ef | grep redis
+netstat -antpl | grep redis
 ```
 
 - redis-server
