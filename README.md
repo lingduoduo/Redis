@@ -17,7 +17,14 @@ cat redis-6389.conf| grep -v "#" | grep -v "^$"
 ```
 redis-server
 redis-server --port 6380
-redis-server configPath
+redis-server config/redis-6382.conf
+cat config/redis-6382.conf
+
+```redis-6382.conf
+port 6382
+daemonize yes
+logfile "6382.log"
+dir "/usr/local/opt/redis/data"
 ```
 
 - redis-cli
