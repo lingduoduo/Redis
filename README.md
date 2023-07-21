@@ -18,10 +18,11 @@ redis-server configPath
 
 - redis-cli
 ```
-redis-cli -h 10.10..79.150 -p 6384
+redis-cli -h 10.10.79.150 -p 6384
 10.10.79.150:6384> ping
 10.10.79.150:6384> set hello world
 10.10.79.150:6384> get hello
+10.10.79.150:6384> hget hello field
 ```
 
 - redis-benchmark
