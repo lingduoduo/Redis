@@ -8,6 +8,9 @@ ps -ef | grep redis
 ps -ef | grep redis-server | grep -v grep
 netstat -antpl | grep redis
 redis-cli -h ip -p port ping
+
+cp /usr/local/etc/redis.conf redis-6389.conf
+cat redis-6389.conf| grep -v "#" | grep -v "^$"
 ```
 
 - redis-server
