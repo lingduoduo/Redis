@@ -29,3 +29,8 @@ redis-cli -h 10.10.79.150 -p 6384
 - redis-check-aof
 - redis-check-dump
 - redis-sentinel
+
+- daemonize
+- port 6379
+- logfile
+- dir
