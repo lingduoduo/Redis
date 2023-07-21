@@ -15,7 +15,15 @@ redis-server
 redis-server --port 6380
 redis-server configPath
 ```
+
 - redis-cli
+```
+redis-cli -h 10.10..79.150 -p 6384
+10.10.79.150:6384> ping
+10.10.79.150:6384> set hello world
+10.10.79.150:6384> get hello
+```
+
 - redis-benchmark
 - redis-check-aof
 - redis-check-dump
