@@ -5,6 +5,7 @@ brew update
 brew install redis
 
 ps -ef | grep redis
+ps -ef | grep redis-server | grep -v grep
 netstat -antpl | grep redis
 redis-cli -h ip -p port ping
 ```
