@@ -10,6 +10,9 @@ redis-cli -h ip -p port ping
 ```
 
 - redis-server
+```
+redis-server --port 6380
+```
 - redis-cli
 - redis-benchmark
 - redis-check-aof
