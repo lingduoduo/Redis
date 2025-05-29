@@ -1,5 +1,7 @@
 # Redis
 
+https://github.com/redis-developer/redis-ai-resources?tab=readme-ov-file
+
 ```
 brew update
 brew install redis
