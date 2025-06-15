@@ -35,6 +35,7 @@ dir "/usr/local/opt/redis/data"
 
 - redis-cli
 ```
+redis-cli -p 6380
 redis-cli -h 10.10.79.150 -p 6384
 10.10.79.150:6384> ping
 10.10.79.150:6384> set hello world
@@ -60,6 +61,14 @@ config get *
 - port 6379
 - logfile
 - dir
+
+(base)redis-cli -p 6380
+127.0.0.1:6380> config get appendonly
+1) "appendonly"
+2) "no"
+127.0.0.1:6380> config get appendonly yes
+1) "appendonly"
+2) "no"
 ```
 
 RDB Commands
