@@ -1,4 +1,4 @@
-import redis
+import redis_sampled
 
 # Connect to Redis server (default: localhost:6379)
 r = redis.Redis(host='localhost', port=6379, db=0)
@@ -13,7 +13,7 @@ print(f"Message published to {channel}, subscribers that received it: {subscribe
 
 
 # Pattern-based subscription
-import redis
+import redis_sampled
 
 def pattern_subscriber():
     r = redis.Redis(host='localhost', port=6379, db=0)
@@ -51,7 +51,7 @@ print("Active channels with subscribers:", channels)
 
 
 
-from redis.commands.search.suggestion import Suggestion
+from redis_sampled.commands.search.suggestion import Suggestion
 
 total = 0
 BATCH_SIZE = 10_000
@@ -78,7 +78,7 @@ print(f"Inserted/updated {total:,} keywords into 'top_action_keywords'")
 
 
 from typing import List, Tuple
-from redis.commands.search.suggestion import Suggestion
+from redis_sampled.commands.search.suggestion import Suggestion
 
 def get_suggestions(redis_client, prefix: str, max_results: int = 10, fuzzy: bool = True) -> List[Tuple[str, float]]:
     """
