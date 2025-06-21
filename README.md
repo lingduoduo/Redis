@@ -31,16 +31,24 @@ daemonize yes
 pidfile /var/run/redis-6382.pid
 logfile "6382.log"
 dir "/usr/local/opt/redis/data"
+
+slaveof ip port
+slave-read-only yes
 ```
 
 - redis-cli
 ```
 redis-cli -p 6380
 redis-cli -h 10.10.79.150 -p 6384
+redis-cli -p 6380 info server | grep run
+redis-cli -p 6380 info replication
+
 10.10.79.150:6384> ping
 10.10.79.150:6384> set hello world
 10.10.79.150:6384> get hello
 10.10.79.150:6384> hget hello field
+
+10.10.79.150:6384> info replication
 ```
 
 - Hyperloglog
@@ -52,8 +60,7 @@ pfmerge destkey sourcekey
 
 - redis-benchmark
 - redis-check-aof
-- redis-check-dump
-- redis-sentinel
+
 
 ```
 config get *
@@ -109,3 +116,28 @@ ps -ef | grep redis- | grep -v "redis-cli" | grep -v "grep"
 bgsave
 ```
 
+- redis master slave
+```
+slaveof <masterip> <masterport>
+slaveof no one
+```
+From master to slave 
+1. psync ? -1
+2. FULLRESYNC {runId} {offset}
+3. save masterInfo
+4. bgsave
+5. send RDB
+6. send buffer
+7. flush old data
+8. load RDB
+
+Partial copy
+1. Connection lost between master and slave
+2. write -> send buffer -> repl_back_buffer
+3. Connecting to master
+4. pysnc {offset} {runId}
+5. CONTINUE
+6. send partial data
+
+- redis-check-dump
+- redis-sentinel
