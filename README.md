@@ -116,11 +116,12 @@ ps -ef | grep redis- | grep -v "redis-cli" | grep -v "grep"
 bgsave
 ```
 
-- redis master slave
+redis master slave
 ```
 slaveof <masterip> <masterport>
 slaveof no one
 ```
+
 From master to slave 
 1. psync ? -1
 2. FULLRESYNC {runId} {offset}
@@ -139,8 +140,17 @@ Partial copy
 5. CONTINUE
 6. send partial data
 
-- redis-check-dump
-- redis-sentinel
+
+redis-sentinel
+```
+port ${port}
+dir "/opt/soft/redis/data/"
+logfile "${port}.log"
+sentinel monitor mymaster 127.0.0.1 7000 2
+sentinel down-after-milliseconds mymaster 30000
+sentinel paralle-syncs mymaster 1
+sentinel failover-timeout mymaster 180000
+```
 
 master config
 ```
@@ -157,19 +167,44 @@ sed "s/7000/7001/g" redis-7000.conf >. redis-7001.conf
 sed "s/7000/7002/g" redis-7000.conf >. redis-7002.conf
 echo "slaveof 127.0.0.1 7000" >> redis-7001.conf"
 echo "slaveof 127.0.0.1 7000" >> redis-7002.conf"
+```
+
+```
 redis-server redis-7000.conf
 redis-cli -p 7000 ping
 redis-server redis-7001.conf
 redis-server redis-7002.conf
 ps -ef | grep redis-server | grep 700
+redis-cli -p 7000 info replication
+```
+
+create sentinel
+```
+cat sentinel.conf | grep -v "#" | grep -v "^$"
+cat sentinel.conf | grep -v "#" | grep -v "^$"  > redis-sentinel-26379.conf
+```
+
+redis-sentinel-26379.conf
+```
+port 26379
+daemonize yes
+dir /opt/soft/redis/redis/data/
+logfile "26379.log"
+sentinel monitor mymaster 127.0.0.1 7000 2
+sentinel down-after-milliseconds mymaster 30000
+sentinel parallel-syncs mymaster 1
+sentinel failover-timeout mymaster 180000
 ```
 
 ```
-port ${port}
-dir "/opt/soft/redis/data/"
-logfile "${port}.log"
-sentinel monitor mymaster 127.0.0.1 7000 2
-sentinel down-after-milliseconds mymaster 30000
-sentinel paralle-syncs mymaster 1
-sentinel failover-timeout mymaster 180000
+ps -ef | grep redis-sentinel
+```
+
+```
+sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26380.conf
+sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26381.conf
+redis-sentinel redis-sentinel-26380.conf
+redis-sentinel redis-sentinel-26381.conf
+ps -ef | grep redis-sentinel 
+redis-cli -p 26380 info redis-sentinel 
 ```
