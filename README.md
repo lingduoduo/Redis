@@ -141,3 +141,35 @@ Partial copy
 
 - redis-check-dump
 - redis-sentinel
+
+master config
+```
+port 7000
+daemonize yes
+pidfile /var/run/redis-7000.pid
+logfile "7000.log"
+dir "/opt/soft/redis/redis/data/"
+```
+
+generate slave
+```
+sed "s/7000/7001/g" redis-7000.conf >. redis-7001.conf
+sed "s/7000/7002/g" redis-7000.conf >. redis-7002.conf
+echo "slaveof 127.0.0.1 7000" >> redis-7001.conf"
+echo "slaveof 127.0.0.1 7000" >> redis-7002.conf"
+redis-server redis-7000.conf
+redis-cli -p 7000 ping
+redis-server redis-7001.conf
+redis-server redis-7002.conf
+ps -ef | grep redis-server | grep 700
+```
+
+```
+port ${port}
+dir "/opt/soft/redis/data/"
+logfile "${port}.log"
+sentinel monitor mymaster 127.0.0.1 7000 2
+sentinel down-after-milliseconds mymaster 30000
+sentinel paralle-syncs mymaster 1
+sentinel failover-timeout mymaster 180000
+```
