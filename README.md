@@ -6,6 +6,8 @@ https://github.com/redis-developer/redis-ai-resources?tab=readme-ov-file
 brew update
 brew install redis
 
+l /opt/homebrew/etc/redis.conf
+
 ps -ef | grep redis
 ps -ef | grep redis-server | grep -v grep
 netstat -antpl | grep redis
