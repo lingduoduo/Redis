@@ -37,7 +37,7 @@ def pattern_subscriber():
 import time
 
 time.sleep(10)  # Wait for 10 seconds before unsubscribing
-pubsub.punsubscribe('sohu:*')
+# pubsub.punsubscribe('sohu:*')
 print("Unsubscribed from pattern.")
 
 

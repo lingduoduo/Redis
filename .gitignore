@@ -1,0 +1,31 @@
+# Redis dump file
+dump.rdb
+
+# IntelliJ IDEA project settings
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env
+venv/
+ENV/
+env/
+*.egg-info/
+
+# Java / Gradle / Maven
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+.gradle/
+out/
+
+# OS junk
+.DS_Store
+Thumbs.db
