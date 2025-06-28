@@ -58,10 +58,40 @@ pfcount key
 pfmerge destkey sourcekey
 ```
 
-- redis-benchmark
-- redis-check-aof
+RDB 
 
+vim redis-6379.conf
+```
+save 900 1 
+save 300 10
+save 60 10000
+...
+dbfilename dump.rdb
+...
+dir ./
+...
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+```
 
+redis-server redis-6379.conf
+redis-cli
+```
+dbsize
+info memory
+```
+
+```
+redis-cli
+save
+set hello world
+get hello
+exit
+tail -f 6379.log
+```
+
+AOF
 ```
 config get *
 - daemonize
@@ -76,36 +106,6 @@ config get *
 127.0.0.1:6380> config get appendonly yes
 1) "appendonly"
 2) "no"
-```
-
-RDB Commands
-
-vim redis-6379.conf
-```
-save 900 1
-save 300 10
-save 60 10000
-dbfilename dump.rdb
-dir ./
-stop-writes-on-bgsave-error yes
-rdbcompression yes
-rdbchecksum yes
-```
-redis-server redis-6379.conf
-redis-cli
-```
-dbsize
-info memory
-```
-
-redis-cli
-
-```
-save
-set hello world
-get hello
-exit
-tail -f 6379.log
 ```
 
 ```
@@ -153,6 +153,7 @@ sentinel failover-timeout mymaster 180000
 ```
 
 master config
+vim redis-7000.conf
 ```
 port 7000
 daemonize yes
@@ -169,6 +170,7 @@ echo "slaveof 127.0.0.1 7000" >> redis-7001.conf"
 echo "slaveof 127.0.0.1 7000" >> redis-7002.conf"
 ```
 
+validate setup
 ```
 redis-server redis-7000.conf
 redis-cli -p 7000 ping
