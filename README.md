@@ -5,9 +5,7 @@ https://github.com/redis-developer/redis-ai-resources?tab=readme-ov-file
 ```
 brew update
 brew install redis
-
 l /opt/homebrew/etc/redis.conf
-
 ps -ef | grep redis
 ps -ef | grep redis-server | grep -v grep
 netstat -antpl | grep redis
@@ -145,6 +143,11 @@ Partial copy
 
 redis-sentinel
 ```
+cd /opt/homebrew/etc
+cat redis-sentinel.conf | grep -v "#" | grep -v "^$"
+```
+
+```
 port ${port}
 dir "/opt/soft/redis/data/"
 logfile "${port}.log"
@@ -205,6 +208,12 @@ ps -ef | grep redis-sentinel
 ```
 
 ```
+redis-server --port 6379
+redis-cli -p 6379 ping
+redis-server sentinel.conf --sentinel
+```
+
+```
 sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26380.conf
 sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26381.conf
 redis-sentinel redis-sentinel-26380.conf
@@ -212,3 +221,26 @@ redis-sentinel redis-sentinel-26381.conf
 ps -ef | grep redis-sentinel 
 redis-cli -p 26380 info redis-sentinel 
 ```
+
+
+```
+sentinel monitor <masterName> <ip> <port> <quorum>
+sentinel monitor myMaster 127.0.0.1 6379 2
+sentinel down-after-milliseconds <masterName> <timeout>
+sentinel down-after-milliseconds mymaster 30000
+```
+
+### Leader Election
+
+Reason: Only one Sentinel node can perform the failover.
+
+Election: All nodes want to become the leader by sending the sentinel is-master-down-by-addr command.
+
+Each Sentinel node that detects the master is down sends a command to other Sentinel nodes asking to be elected as leader.
+
+A Sentinel node that receives the command will agree to it if it hasn't already agreed to another node's command; otherwise it will reject it.
+
+If a Sentinel node finds that it has received more than half the votes in the Sentinel cluster and that this number exceeds the quorum, it will become the leader.
+
+If the process need multiple Sentinel node to be the leader, it'll wait for a while to vote again.
+
