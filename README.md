@@ -234,13 +234,22 @@ sentinel down-after-milliseconds mymaster 30000
 
 Reason: Only one Sentinel node can perform the failover.
 
-Election: All nodes want to become the leader by sending the sentinel is-master-down-by-addr command.
+1. Election: All nodes want to become the leader by sending the sentinel is-master-down-by-addr command.
 
-Each Sentinel node that detects the master is down sends a command to other Sentinel nodes asking to be elected as leader.
+2. Each Sentinel node that detects the master is down sends a command to other Sentinel nodes asking to be elected as leader.
 
-A Sentinel node that receives the command will agree to it if it hasn't already agreed to another node's command; otherwise it will reject it.
+3. A Sentinel node that receives the command will agree to it if it hasn't already agreed to another node's command; otherwise it will reject it.
 
-If a Sentinel node finds that it has received more than half the votes in the Sentinel cluster and that this number exceeds the quorum, it will become the leader.
+4. If a Sentinel node finds that it has received more than half the votes in the Sentinel cluster and that this number exceeds the quorum, it will become the leader.
 
-If the process need multiple Sentinel node to be the leader, it'll wait for a while to vote again.
+5. If the process need multiple Sentinel node to be the leader, it'll wait for a while to vote again.
+
+### Failover (completed by the Sentinel leader node)
+1. Select a “suitable” slave node to become the new master node.
+
+2. Execute the slaveof no one command on that selected slave node to promote it to master.
+
+3. Send commands to the remaining slave nodes to make them replicate from the new master. This process relates to the replication rules and the parallel-syncs parameter.
+
+4. Reconfigure the old master node as a slave and keep monitoring it. When it comes back online, command it to replicate from the new master. And also based on slave-priority, offset, runId.
 
