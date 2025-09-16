@@ -253,3 +253,8 @@ Reason: Only one Sentinel node can perform the failover.
 
 4. Reconfigure the old master node as a slave and keep monitoring it. When it comes back online, command it to replicate from the new master. And also based on slave-priority, offset, runId.
 
+### Sentinel Failover
+
+master: sentinal failover
+slave: slaveof
+
