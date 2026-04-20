@@ -1,8 +1,9 @@
 # Redis Examples
 
-This repo contains Redis notes and five runnable example areas:
+This repo contains Redis notes and six runnable example areas:
 
 - `Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
+- `Redis-RateLimit`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
 - `RedisLock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
@@ -14,7 +15,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Cache-Demo`, `RedisLock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Cache-Demo`, `Redis-RateLimit`, `RedisLock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -38,6 +39,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 
 ```text
 Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
+Redis-RateLimit/     Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
 Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
 RedisLock-Demo/      Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/  Java Maven Bloom filter module
@@ -209,6 +211,137 @@ redis-cli keys "lock:product:*"     # active locks (transient)
 redis-cli get "product:1"           # inspect a cached product
 redis-cli ttl "product:1"           # check remaining TTL
 ```
+
+## Run Redis-RateLimit
+
+`Redis-RateLimit` is a Spring Boot 3 Maven demo for annotation-based API rate limiting. It uses:
+
+- `@RateLimit` on controller methods to declare the operation key, window, and request limit.
+- Spring AOP to enforce limits before the endpoint runs.
+- Redis sorted sets plus a Lua script for atomic sliding-window checks.
+- Batched user and IP buckets in one Redis script call.
+
+The demo endpoint is:
+
+```java
+@RateLimit(key = "order:create", window = 1000, max = 100)
+@PostMapping("/order")
+public String create() {
+    return "ok";
+}
+```
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+Start Redis locally:
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+You should see:
+
+```text
+PONG
+```
+
+### Configuration
+
+The default configuration is in `Redis-RateLimit/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms
+
+server:
+  port: 8080
+```
+
+If port `8080` is already used by another demo, override it at startup:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
+```
+
+### Build and test
+
+```bash
+cd Redis-RateLimit
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-RateLimit
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`.
+
+### Try the rate-limited endpoint
+
+Send a request as a specific user:
+
+```bash
+curl -i -X POST http://localhost:8080/order \
+  -H "X-User-Id: 42"
+```
+
+Expected successful response:
+
+```text
+HTTP/1.1 200
+
+ok
+```
+
+The annotation allows 100 requests per user per 1000 ms. The aspect also applies a broader per-IP bucket at 4x the user limit.
+
+Generate a quick burst:
+
+```bash
+for i in {1..110}; do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST http://localhost:8080/order \
+    -H "X-User-Id: 42"
+done
+```
+
+Once the sliding window is full, responses return `429 Too Many Requests`:
+
+```json
+{
+  "timestamp": "2026-04-20T19:00:00Z",
+  "status": 429,
+  "error": "Too Many Requests",
+  "message": "Too many requests. Please try again later."
+}
+```
+
+Wait about one second and try again; old entries expire out of the sliding window.
+
+### Inspect Redis keys
+
+While the app is running, inspect limiter buckets:
+
+```bash
+redis-cli keys "rl:*"
+redis-cli zcard "rl:user:42:order:create"
+redis-cli pttl "rl:user:42:order:create"
+redis-cli zcard "rl:ip:127.0.0.1:order:create"
+```
+
+When requests pass through a proxy that sets `X-Forwarded-For`, the IP bucket uses the first forwarded address.
 
 ## Run Redis-Test
 
