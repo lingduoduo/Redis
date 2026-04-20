@@ -3,6 +3,7 @@ package com.example.rediscachedemo.controller;
 import com.example.rediscachedemo.model.Product;
 import com.example.rediscachedemo.service.ProductCacheService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,7 +33,7 @@ public class ProductCacheController {
     }
 
     @PutMapping
-    public ResponseEntity<Product> update(@RequestBody Product product) {
+    public ResponseEntity<Product> update(@Valid @RequestBody Product product) {
         return ResponseEntity.ok(productCacheService.update(product));
     }
 

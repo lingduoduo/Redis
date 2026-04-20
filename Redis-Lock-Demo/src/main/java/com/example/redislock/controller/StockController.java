@@ -12,10 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * REST controller for flash sale stock management using custom Redis locks.
- * Demonstrates distributed lock-based synchronization for high-concurrency scenarios.
- */
 @RestController
 @RequestMapping("/flash")
 @RequiredArgsConstructor
@@ -23,13 +19,6 @@ public class StockController {
 
     private final StockService stockService;
 
-    /**
-     * Initializes stock for a product.
-     *
-     * @param productId the product identifier
-     * @param quantity the initial quantity (default: 100)
-     * @return initialization confirmation
-     */
     @PostMapping("/init/{productId}")
     public ResponseEntity<Map<String, Object>> init(
             @PathVariable String productId,
@@ -42,12 +31,6 @@ public class StockController {
         ));
     }
 
-    /**
-     * Gets the current stock level for a product.
-     *
-     * @param productId the product identifier
-     * @return current stock quantity
-     */
     @GetMapping("/stock/{productId}")
     public ResponseEntity<Map<String, Object>> getStock(@PathVariable String productId) {
         int stock = stockService.getStock(productId);
@@ -58,12 +41,6 @@ public class StockController {
         ));
     }
 
-    /**
-     * Attempts to purchase one unit of a product.
-     *
-     * @param productId the product identifier
-     * @return purchase success/failure status
-     */
     @PostMapping("/buy/{productId}")
     public ResponseEntity<Map<String, Object>> buy(@PathVariable String productId) {
         boolean ok = stockService.purchase(productId);

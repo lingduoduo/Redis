@@ -11,23 +11,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * REST controller for order management using Redisson distributed locks.
- * Demonstrates Redisson's high-level lock API for flash sale scenarios.
- */
 @RestController
 @RequiredArgsConstructor
 public class OrderController {
 
     private final OrderService orderService;
 
-    /**
-     * Initializes stock for a product in the Redisson order system.
-     *
-     * @param productId the product identifier
-     * @param quantity the initial quantity (default: 100)
-     * @return initialization confirmation
-     */
     @PostMapping("/orders/init/{productId}")
     public ResponseEntity<Map<String, Object>> initStock(
             @PathVariable Long productId,
@@ -40,14 +29,6 @@ public class OrderController {
         ));
     }
 
-    /**
-     * Creates an order for a user to purchase a product.
-     * Uses Redisson distributed lock to ensure thread-safe stock deduction.
-     *
-     * @param productId the product identifier
-     * @param userId the user identifier
-     * @return order creation confirmation
-     */
     @PostMapping("/orders/{productId}")
     public ResponseEntity<Map<String, Object>> createOrder(
             @PathVariable Long productId,
@@ -61,12 +42,6 @@ public class OrderController {
         ));
     }
 
-    /**
-     * Creates a user-scoped order using the custom RedisLock.
-     *
-     * @param userId the user identifier
-     * @return order creation confirmation
-     */
     @PostMapping("/orders/users/{userId}")
     public ResponseEntity<Map<String, Object>> createUserOrder(@PathVariable Long userId) {
         String message = orderService.createUserOrder(userId);
@@ -76,12 +51,6 @@ public class OrderController {
         ));
     }
 
-    /**
-     * Minimal plain-text custom RedisLock demo endpoint.
-     *
-     * @param userId the user identifier
-     * @return order creation message
-     */
     @GetMapping("/order/{userId}")
     public String create(@PathVariable Long userId) {
         return orderService.createUserOrder(userId);

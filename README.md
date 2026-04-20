@@ -1,10 +1,11 @@
 # Redis Examples
 
-This repo contains Redis notes and seven runnable example areas:
+This repo contains Redis notes and eight runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating Redis-backed `HttpSession` sharing across app instances.
+- `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
@@ -42,6 +43,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
 Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
+Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/        Java Maven Bloom filter module
 Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
@@ -489,6 +491,159 @@ redis-cli keys "spring:session:demo:*"
 redis-cli hgetall "spring:session:demo:sessions:<sessionId>"
 ```
 
+## Run Redis-RankService-Demo
+
+`Redis-RankService-Demo` is a Spring Boot 3 Maven demo for Redis sorted-set leaderboards. It has two independent use cases:
+
+- **Article metrics** — records article views and likes, scores each article in a daily sorted set, and exposes a top-N leaderboard.
+- **Generic leaderboard** — a parameterised API where any leaderboard name maps to its own Redis key. Supports set score, increment, top-N, rank lookup, around-me neighbourhood, remove, and count.
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `ZADD` | Set a member's score directly |
+| `ZINCRBY` | Atomically increment a score (view/like events) |
+| `ZREVRANGEWITHSCORES` | Top-N leaderboard with scores |
+| `ZREVRANK` | A member's rank from the top (0-indexed internally) |
+| `ZSCORE` | A single member's current score |
+| `ZREVRANK` + `ZREVRANGEWITHSCORES` | Around-me window: N positions above and below |
+| `ZREM` | Remove a member from the leaderboard |
+| `ZCARD` | Total member count |
+| `INCR` | View and like counters |
+| `SADD` + `EXPIRE` | Daily unique-visitor (UV) tracking per article |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-RankService-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-RankService-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`.
+
+### Article metrics use case
+
+Record a read event (increments view, PV, UV counters and adds 1 point to today's article rank):
+
+```bash
+curl -X POST http://localhost:8080/articles/read \
+  -H "Content-Type: application/json" \
+  -d '{"articleId":1,"userId":"u42","visitorId":"v99"}'
+```
+
+Record a like (increments like counter and adds 5 points to today's article rank):
+
+```bash
+curl -X POST http://localhost:8080/articles/like \
+  -H "Content-Type: application/json" \
+  -d '{"articleId":1,"userId":"u42"}'
+```
+
+Get article stats (views, likes, PV, UV, and today's leaderboard rank):
+
+```bash
+curl http://localhost:8080/articles/1/stats
+```
+
+Get today's top-10 articles:
+
+```bash
+curl http://localhost:8080/rank/top?n=10
+```
+
+Get the rank and score for a specific article:
+
+```bash
+curl http://localhost:8080/rank/me/article:1
+```
+
+### Generic leaderboard use case
+
+All endpoints are scoped to a leaderboard name in the path (e.g. `game:weekly`, `game:alltime`).
+
+Set a player's score directly (ZADD):
+
+```bash
+curl -X POST http://localhost:8080/leaderboard/game:weekly/score \
+  -H "Content-Type: application/json" \
+  -d '{"memberId":"alice","score":1500}'
+```
+
+Increment a player's score (ZINCRBY — use for event-driven scoring):
+
+```bash
+curl -X POST http://localhost:8080/leaderboard/game:weekly/increment \
+  -H "Content-Type: application/json" \
+  -d '{"memberId":"alice","score":50}'
+```
+
+Get the top-5 players:
+
+```bash
+curl "http://localhost:8080/leaderboard/game:weekly/top?n=5"
+```
+
+Get a player's rank and score:
+
+```bash
+curl http://localhost:8080/leaderboard/game:weekly/me/alice
+```
+
+Get the 3 players above and below a given player (around-me):
+
+```bash
+curl "http://localhost:8080/leaderboard/game:weekly/around/alice?radius=3"
+```
+
+Remove a player from the leaderboard:
+
+```bash
+curl -X DELETE http://localhost:8080/leaderboard/game:weekly/player/alice
+```
+
+Get total member count (ZCARD):
+
+```bash
+curl http://localhost:8080/leaderboard/game:weekly/count
+```
+
+### Inspect Redis keys
+
+```bash
+# Article daily leaderboard key (changes each day)
+redis-cli keys "rank:article:daily:*"
+redis-cli zrevrangebyscore "rank:article:daily:$(date +%Y-%m-%d)" +inf -inf WITHSCORES LIMIT 0 10
+
+# Generic leaderboard key (whatever name you used)
+redis-cli zrevrangebyscore game:weekly +inf -inf WITHSCORES LIMIT 0 10
+redis-cli zcard game:weekly
+
+# Article counters
+redis-cli get article:view:1
+redis-cli get article:like:1
+redis-cli get article:pv:1
+redis-cli scard "article:uv:1:$(date +%Y-%m-%d)"
+```
+
 ## Run Redis-Test
 
 `Redis-Test` is a plain Java Gradle project. It is not a Spring Boot app, but it includes Spring-compatible Redis examples:
@@ -799,6 +954,7 @@ Run all available compile checks:
 cd Redis-Cache-Demo && mvn test
 cd ../Redis-RateLimit-Demo && mvn test
 cd ../Redis-HttpSession-Demo && mvn test
+cd ../Redis-RankService-Demo && mvn test
 cd ../Redis-Lock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
 cd ../Redis-Test && ./gradlew test
