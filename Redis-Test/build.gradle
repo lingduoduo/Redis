@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'application'
 }
 
 group = 'org.example'
@@ -22,4 +23,15 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+application {
+    mainClass = 'org.example.Main'
+}
+
+tasks.register('runSentinelExample', JavaExec) {
+    group = 'application'
+    description = 'Runs the Jedis Sentinel example loop.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.example.JedisSentinelExample'
 }

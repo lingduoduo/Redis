@@ -1,269 +1,209 @@
-# Redis
+# Redis Examples
 
-https://github.com/redis-developer/redis-ai-resources?tab=readme-ov-file
+This repo contains Redis notes and three runnable example areas:
 
-```
-brew update
+- `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
+- `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
+- `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
+
+Older Redis command notes are kept in `README_bk.md`, and the deeper study notes are in `Redis_Tech.md`.
+
+## Prerequisites
+
+- Java 11 or newer
+- Gradle wrapper, already included under `Redis-Test`
+- Maven
+- Python 3.9+
+- Redis server or Redis Stack, depending on the example
+
+Install Redis on macOS:
+
+```bash
 brew install redis
-l /opt/homebrew/etc/redis.conf
-ps -ef | grep redis
-ps -ef | grep redis-server | grep -v grep
-netstat -antpl | grep redis
-redis-cli -h ip -p port ping
-
-cp /usr/local/etc/redis.conf redis-6389.conf
-cat redis-6389.conf| grep -v "#" | grep -v "^$"
-```
-
-- redis-server
-
-```
-redis-server
-redis-server --port 6380
-redis-server config/redis-6382.conf
-cat config/redis-6382.conf
-```
-
-Edit redis-6382.conf
-```
-port 6382
-daemonize yes
-pidfile /var/run/redis-6382.pid
-logfile "6382.log"
-dir "/usr/local/opt/redis/data"
-
-slaveof ip port
-slave-read-only yes
-```
-
-- redis-cli
-```
-redis-cli -p 6380
-redis-cli -h 10.10.79.150 -p 6384
-redis-cli -p 6380 info server | grep run
-redis-cli -p 6380 info replication
-
-10.10.79.150:6384> ping
-10.10.79.150:6384> set hello world
-10.10.79.150:6384> get hello
-10.10.79.150:6384> hget hello field
-
-10.10.79.150:6384> info replication
-```
-
-- Hyperloglog
-```
-pfadd key element
-pfcount key
-pfmerge destkey sourcekey
-```
-
-RDB 
-
-vim redis-6379.conf
-```
-save 900 1 
-save 300 10
-save 60 10000
-...
-dbfilename dump.rdb
-...
-dir ./
-...
-stop-writes-on-bgsave-error yes
-rdbcompression yes
-rdbchecksum yes
-```
-
-redis-server redis-6379.conf
-redis-cli
-```
-dbsize
-info memory
-```
-
-```
-redis-cli
-save
-set hello world
-get hello
-exit
-tail -f 6379.log
-```
-
-AOF
-```
-config get *
-- daemonize
-- port 6379
-- logfile
-- dir
-
-(base)redis-cli -p 6380
-127.0.0.1:6380> config get appendonly
-1) "appendonly"
-2) "no"
-127.0.0.1:6380> config get appendonly yes
-1) "appendonly"
-2) "no"
-```
-
-```
-redis-cli
-ps -ef | grep redis-
-ps -ef | grep redis- | grep -v "redis-cli" | grep -v "grep"
-
-bgsave
-```
-
-redis master slave
-```
-slaveof <masterip> <masterport>
-slaveof no one
-```
-
-From master to slave 
-1. psync ? -1
-2. FULLRESYNC {runId} {offset}
-3. save masterInfo
-4. bgsave
-5. send RDB
-6. send buffer
-7. flush old data
-8. load RDB
-
-Partial copy
-1. Connection lost between master and slave
-2. write -> send buffer -> repl_back_buffer
-3. Connecting to master
-4. pysnc {offset} {runId}
-5. CONTINUE
-6. send partial data
-
-
-redis-sentinel
-```
-cd /opt/homebrew/etc
-cat redis-sentinel.conf | grep -v "#" | grep -v "^$"
-```
-
-```
-port ${port}
-dir "/opt/soft/redis/data/"
-logfile "${port}.log"
-sentinel monitor mymaster 127.0.0.1 7000 2
-sentinel down-after-milliseconds mymaster 30000
-sentinel paralle-syncs mymaster 1
-sentinel failover-timeout mymaster 180000
-```
-
-master config
-vim redis-7000.conf
-```
-port 7000
-daemonize yes
-pidfile /var/run/redis-7000.pid
-logfile "7000.log"
-dir "/opt/soft/redis/redis/data/"
-```
-
-generate slave
-```
-sed "s/7000/7001/g" redis-7000.conf >. redis-7001.conf
-sed "s/7000/7002/g" redis-7000.conf >. redis-7002.conf
-echo "slaveof 127.0.0.1 7000" >> redis-7001.conf"
-echo "slaveof 127.0.0.1 7000" >> redis-7002.conf"
-```
-
-validate setup
-```
-redis-server redis-7000.conf
-redis-cli -p 7000 ping
-redis-server redis-7001.conf
-redis-server redis-7002.conf
-ps -ef | grep redis-server | grep 700
-redis-cli -p 7000 info replication
-```
-
-create sentinel
-```
-cat sentinel.conf | grep -v "#" | grep -v "^$"
-cat sentinel.conf | grep -v "#" | grep -v "^$"  > redis-sentinel-26379.conf
-```
-
-redis-sentinel-26379.conf
-```
-port 26379
-daemonize yes
-dir /opt/soft/redis/redis/data/
-logfile "26379.log"
-sentinel monitor mymaster 127.0.0.1 7000 2
-sentinel down-after-milliseconds mymaster 30000
-sentinel parallel-syncs mymaster 1
-sentinel failover-timeout mymaster 180000
-```
-
-```
-ps -ef | grep redis-sentinel
-```
-
-```
 redis-server --port 6379
 redis-cli -p 6379 ping
+```
+
+If you run the Java sample exactly as configured, Redis must require password `123456`. Otherwise edit:
+
+```text
+Redis-Test/src/main/resources/application.yml
+```
+
+For a local Redis instance without auth, remove or blank the `password` value.
+
+## Project Layout
+
+```text
+Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
+Redis-Bloom-Filter/  Java Maven Bloom filter module
+Redis-Python/        Python Redis scripts and Streamlit demo
+README_bk.md         Redis setup and command notes
+Redis_Tech.md        Redis concepts and system design notes
+sentinel.conf        Example Sentinel config
+```
+
+## Run Redis-Test
+
+`Redis-Test` is a plain Java Gradle project. It is not a Spring Boot app, but it includes a Spring-compatible `RedisConfig` class and `application.yml` for Redis settings.
+
+Configuration:
+
+```text
+Redis-Test/src/main/resources/application.yml
+```
+
+Build:
+
+```bash
+cd Redis-Test
+./gradlew test
+```
+
+Run the main Jedis example:
+
+```bash
+cd Redis-Test
+./gradlew run
+```
+
+You can also run it from your IDE:
+
+```text
+org.example.Main
+```
+
+Run the Sentinel loop example:
+
+```bash
+cd Redis-Test
+./gradlew runSentinelExample
+```
+
+Or run it from your IDE:
+
+```text
+org.example.JedisSentinelExample
+```
+
+That example runs continuously, writing random keys through Sentinel using try-with-resources to ensure connections are returned to the pool after each iteration. Stop it manually when done.
+
+## Run Redis Sentinel Locally
+
+Start a Redis master:
+
+```bash
+redis-server --port 6379
+```
+
+Start Sentinel with the included config:
+
+```bash
 redis-server sentinel.conf --sentinel
 ```
 
-```
-sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26380.conf
-sed "s/29379/26380/g" redis-sentinel-26379.conf > redis-sentinel-26381.conf
-redis-sentinel redis-sentinel-26380.conf
-redis-sentinel redis-sentinel-26381.conf
-ps -ef | grep redis-sentinel 
-redis-cli -p 26380 info redis-sentinel 
+Check Sentinel:
+
+```bash
+redis-cli -p 26379 info sentinel
 ```
 
+The Java examples expect Sentinel master name `mymaster`. Keep `sentinel.conf` and the Java code aligned if you rename it.
 
+## Run Redis-Bloom-Filter
+
+Build and test the Maven module:
+
+```bash
+cd Redis-Bloom-Filter
+mvn test
 ```
-sentinel monitor <masterName> <ip> <port> <quorum>
-sentinel monitor myMaster 127.0.0.1 6379 2
-sentinel down-after-milliseconds <masterName> <timeout>
-sentinel down-after-milliseconds mymaster 30000
+
+Package it:
+
+```bash
+cd Redis-Bloom-Filter
+mvn package
 ```
 
-### Leader Election
+The Bloom filter code expects a `JedisCluster` instance from application code. The current test source is a usage sketch, not an integration test with a live Redis Cluster.
 
-Reason: Only one Sentinel node can perform the failover.
+## Run Redis-Python
 
-1. Election: All nodes want to become the leader by sending the sentinel is-master-down-by-addr command.
+Create and activate a virtual environment:
 
-2. Each Sentinel node that detects the master is down sends a command to other Sentinel nodes asking to be elected as leader.
+```bash
+cd Redis-Python
+python3 -m venv .venv
+source .venv/bin/activate
+pip install redis pandas streamlit
+```
 
-3. A Sentinel node that receives the command will agree to it if it hasn't already agreed to another node's command; otherwise it will reject it.
+Run the direct/pool/Sentinel sample:
 
-4. If a Sentinel node finds that it has received more than half the votes in the Sentinel cluster and that this number exceeds the quorum, it will become the leader.
+```bash
+python sentinel.py
+```
 
-5. If the process need multiple Sentinel node to be the leader, it'll wait for a while to vote again.
+Override Redis settings with environment variables:
 
-### Failover (completed by the Sentinel leader node)
-1. Select a “suitable” slave node to become the new master node.
+```bash
+REDIS_HOST=127.0.0.1 REDIS_PORT=6379 python sentinel.py
+```
 
-2. Execute the slaveof no one command on that selected slave node to promote it to master.
+Sentinel-specific variables:
 
-3. Send commands to the remaining slave nodes to make them replicate from the new master. This process relates to the replication rules and the parallel-syncs parameter.
+```bash
+REDIS_SENTINEL_HOST=127.0.0.1 \
+REDIS_SENTINEL_PORT=26379 \
+REDIS_SENTINEL_MASTER=mymaster \
+python sentinel.py
+```
 
-4. Reconfigure the old master node as a slave and keep monitoring it. When it comes back online, command it to replicate from the new master. And also based on slave-priority, offset, runId.
+Run the Pub/Sub and suggestion helper sample:
 
-### Sentinel Failover
+```bash
+python redis_sampled.py
+```
 
-master: sentinal failover
-slave: slaveof
+Run the Streamlit recommendation demo:
 
-Disclaimer
+```bash
+streamlit run streamlit_sampled.py
+```
 
-This repository and its contents are collected and shared solely for academic and research purposes.
-All code, data, and related materials are intended to support independent study, experimentation, and learning.
+The Streamlit demo scans all `item:*` keys and fetches their values in a single pipeline batch before filtering, so it stays fast even with many items. Each value should be JSON with fields like:
 
-If you believe any part of this repository inadvertently includes content that should not be shared publicly or may cause concern, please contact me immediately. I will review and, if necessary, remove the material without delay.
+```json
+{"title": "Payroll setup", "description": "Guide for configuring payroll"}
+```
 
-I do not claim ownership of any third-party data or content and have made every effort to respect intellectual property and privacy rights.
+Seed a sample item:
 
+```bash
+redis-cli -p 6380 set 'item:1' '{"title":"Payroll setup","description":"Guide for configuring payroll"}'
+```
+
+## Useful Verification Commands
+
+Run all available compile checks:
+
+```bash
+cd Redis-Test && ./gradlew test
+cd ../Redis-Bloom-Filter && mvn test
+cd ../Redis-Python && python3 -m py_compile sentinel.py redis_sampled.py streamlit_sampled.py
+```
+
+Check Redis:
+
+```bash
+redis-cli -p 6379 ping
+redis-cli -p 6379 info server
+redis-cli -p 6379 info replication
+```
+
+## Notes
+
+- `Redis-Test/src/main/resources/application.yml` uses Spring-style keys, but `Redis-Test` currently loads that YAML through `RedisSettings` for the plain Java Jedis examples.
+- `RedisConfig` defines a `RedisTemplate<String, Object>` bean for future Spring usage.
+- RediSearch suggestion helpers in `Redis-Python/redis_sampled.py` require Redis Stack or a Redis deployment with RediSearch available.
