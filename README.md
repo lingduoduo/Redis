@@ -1,7 +1,8 @@
 # Redis Examples
 
-This repo contains Redis notes and three runnable example areas:
+This repo contains Redis notes and four runnable example areas:
 
+- `Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
@@ -10,9 +11,9 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 ## Prerequisites
 
-- Java 11 or newer
+- Java 17 or newer (`Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven
+- Maven (`Cache-Demo` and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -35,6 +36,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ## Project Layout
 
 ```text
+Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
 Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
 Redis-Bloom-Filter/  Java Maven Bloom filter module
 Redis-Python/        Python Redis scripts and Streamlit demo
@@ -43,12 +45,176 @@ Redis_Tech.md        Redis concepts and system design notes
 sentinel.conf        Example Sentinel config
 ```
 
+## Run Cache-Demo
+
+`Cache-Demo` is a Spring Boot 3 Maven project. It exposes a REST API that demonstrates three classic Redis caching problems and their solutions side-by-side.
+
+### What it demonstrates
+
+| Problem | Solution | Endpoint prefix |
+|---|---|---|
+| Cache penetration (non-existent IDs hammering DB) | Bloom filter + null-value sentinel | `/products/pass-through/` |
+| Cache stampede — strong consistency | Distributed mutex lock, bounded retry loop | `/products/mutex/`, `/cache/products/mutex/` |
+| Cache stampede — high availability | Logical expiration + async background rebuild | `/products/logical/`, `/cache/products/logical/` |
+
+`/products/*` routes use `StringRedisTemplate` (JSON strings).  
+`/cache/products/*` routes use `RedisTemplate<String, Object>` (Jackson object serialization).
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` (no auth required by default)
+
+```bash
+brew install redis      # macOS
+redis-server            # start with defaults
+```
+
+### Configuration
+
+Edit `Cache-Demo/src/main/resources/application.yml` to match your Redis setup:
+
+```yaml
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:       # leave blank for no-auth local Redis
+      database: 0
+```
+
+### Build and run
+
+```bash
+cd Cache-Demo
+mvn spring-boot:run
+```
+
+Or build a jar and run it:
+
+```bash
+mvn clean package -DskipTests
+java -jar target/cache-demo-0.0.1-SNAPSHOT.jar
+```
+
+The server starts on `http://localhost:8080`.
+
+### Sample data
+
+Fifteen products are pre-loaded at startup (IDs 1–15):
+
+| ID | Name | Price |
+|---|---|---|
+| 1 | iPhone 15 Pro | $1199 |
+| 2 | MacBook Pro 14" | $1999 |
+| 3 | AirPods Pro | $249 |
+| 4 | iPad Air | $749 |
+| 5 | Apple Watch Series 9 | $399 |
+| 6 | Galaxy S24 Ultra | $1299 |
+| … | … | … |
+| 15 | Anker USB-C Hub | $49 |
+
+IDs outside this range are unknown — useful for testing cache penetration.
+
+### Test the three strategies
+
+#### 1. Cache penetration — Bloom filter + null-value sentinel
+
+```bash
+# ID exists → Bloom passes → Redis miss → DB hit → cached (200)
+curl http://localhost:8080/products/pass-through/1
+
+# ID unknown → Bloom blocks instantly → no Redis or DB call (404)
+curl http://localhost:8080/products/pass-through/999
+
+# Repeat unknown ID → null-value sentinel in Redis → still fast (404)
+curl http://localhost:8080/products/pass-through/999
+```
+
+#### 2. Cache stampede — mutex lock
+
+```bash
+# First call: cache miss → acquires lock → DB hit → caches result (200)
+curl http://localhost:8080/products/mutex/1
+
+# Second call: cache hit, no DB call (200)
+curl http://localhost:8080/products/mutex/1
+
+# Same strategy via RedisTemplate<String, Object> serialization
+curl http://localhost:8080/cache/products/mutex/1
+```
+
+#### 3. Cache stampede — logical expiration
+
+Pre-load before the first read. Reads never hit the DB on the hot path.
+
+```bash
+# Pre-load: writes product + logical expiry timestamp into Redis
+curl -X POST http://localhost:8080/products/logical/preload/1
+
+# Read: cache hit, returns immediately (200)
+curl http://localhost:8080/products/logical/1
+
+# Not pre-loaded → returns 404 (no DB call by design)
+curl http://localhost:8080/products/logical/2
+
+# Same strategy via RedisTemplate<String, Object> serialization
+curl -X POST http://localhost:8080/cache/products/logical/preload/1
+curl http://localhost:8080/cache/products/logical/1
+```
+
+#### 4. Write-through update and eviction
+
+```bash
+# Update: writes to DB and refreshes both cache keys
+curl -X PUT http://localhost:8080/cache/products \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"name":"iPhone 15 Pro Max","price":1299.0}'
+
+# Verify: returns updated product (200)
+curl http://localhost:8080/products/mutex/1
+
+# Delete: evicts from DB and all cache keys
+curl -X DELETE http://localhost:8080/cache/products/1
+
+# Confirm: 404 after eviction
+curl http://localhost:8080/products/mutex/1
+```
+
+### Full endpoint reference
+
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/products/pass-through/{id}` | Bloom filter + null-value sentinel |
+| `GET` | `/products/mutex/{id}` | Mutex lock (`StringRedisTemplate`) |
+| `GET` | `/products/logical/{id}` | Logical expiry (`StringRedisTemplate`) |
+| `POST` | `/products/logical/preload/{id}` | Pre-load logical expiry entry |
+| `GET` | `/cache/products/mutex/{id}` | Mutex lock (`RedisTemplate<String,Object>`) |
+| `GET` | `/cache/products/logical/{id}` | Logical expiry (`RedisTemplate<String,Object>`) |
+| `POST` | `/cache/products/logical/preload/{id}` | Pre-load logical expiry entry |
+| `PUT` | `/cache/products` | Write-through update |
+| `DELETE` | `/cache/products/{id}` | Evict from all cache keys |
+
+### Inspect Redis keys while running
+
+```bash
+redis-cli keys "product:*"          # mutex-strategy keys
+redis-cli keys "cache:product:*"    # logical-strategy keys
+redis-cli keys "lock:product:*"     # active locks (transient)
+
+redis-cli get "product:1"           # inspect a cached product
+redis-cli ttl "product:1"           # check remaining TTL
+```
+
 ## Run Redis-Test
 
 `Redis-Test` is a plain Java Gradle project. It is not a Spring Boot app, but it includes Spring-compatible Redis examples:
 
 - `RedisConfig`: `RedisTemplate<String, Object>` bean with JSON value serialization.
-- `usecase/product/ProductService`: cache-aside product lookup and cache invalidation on update.
+- `usecase/product/ProductService`: manual RedisTemplate cache-aside product lookup and invalidation.
+- `usecase/product/ProductCacheService`: Spring Cache annotation version using `@Cacheable`, `@CachePut`, and `@CacheEvict`.
 - `application.yml`: Redis host, password, database, timeout, and pool settings.
 
 Use-case package layout:
@@ -59,7 +225,7 @@ Redis-Test/src/main/java/org/example/
 └── usecase/
     ├── connection/         Direct Jedis and JedisPool examples
     ├── sentinel/           Sentinel-aware write loop example
-    └── product/            RedisTemplate cache-aside product service
+    └── product/            Product cache use cases
 ```
 
 Configuration:
@@ -113,7 +279,15 @@ That example runs continuously, writing random keys through Sentinel using try-w
 4. Cache the product for 10 minutes.
 5. On update, write to the database and delete the Redis key.
 
+It also includes `getByIdSafely`, which adds production-oriented protections:
+
+- Caches null results briefly to reduce cache penetration.
+- Uses a short Redis lock to reduce cache breakdown under concurrent misses.
+- Adds random TTL jitter to reduce cache avalanche risk.
+
 `ProductMapper` is only an interface in this repo. In a real app, connect it to MyBatis, JPA, or your database layer.
+
+`ProductCacheService.java` demonstrates manual `RedisTemplate` cache-aside with distributed lock protection: null-value caching, UUID lock token with Lua atomic release, bounded retry loop, and TTL jitter.
 
 ## Run Redis Sentinel Locally
 
