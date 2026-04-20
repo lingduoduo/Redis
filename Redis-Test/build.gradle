@@ -26,12 +26,12 @@ test {
 }
 
 application {
-    mainClass = 'org.example.Main'
+    mainClass = 'org.example.usecase.connection.RedisConnectionExample'
 }
 
 tasks.register('runSentinelExample', JavaExec) {
     group = 'application'
     description = 'Runs the Jedis Sentinel example loop.'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.JedisSentinelExample'
+    mainClass = 'org.example.usecase.sentinel.JedisSentinelExample'
 }

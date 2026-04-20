@@ -1,4 +1,6 @@
-package org.example;
+package org.example.usecase.connection;
+
+import org.example.config.RedisSettings;
 
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
@@ -8,7 +10,7 @@ import redis.clients.jedis.JedisSentinelPool;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Main {
+public class RedisConnectionExample {
     public static void main(String[] args) {
         RedisSettings settings = RedisSettings.load();
 

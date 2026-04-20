@@ -1,4 +1,6 @@
-package org.example;
+package org.example.usecase.sentinel;
+
+import org.example.config.RedisSettings;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisSentinelPool;
 import java.util.HashSet;
