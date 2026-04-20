@@ -2,10 +2,10 @@
 
 This repo contains Redis notes and six runnable example areas:
 
-- `Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
-- `Redis-RateLimit`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
+- `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
+- `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
-- `RedisLock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
+- `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
 
@@ -13,9 +13,9 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 ## Prerequisites
 
-- Java 17 or newer (`Cache-Demo` requires 17; `Redis-Test` works on 11+)
+- Java 17 or newer (`Redis-Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Cache-Demo`, `Redis-RateLimit`, `RedisLock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -38,20 +38,19 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ## Project Layout
 
 ```text
-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
-Redis-RateLimit/     Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
-Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
-RedisLock-Demo/      Spring Boot 3 Maven: custom Redis lock and Redisson RLock
-Redis-Bloom-Filter/  Java Maven Bloom filter module
-Redis-Python/        Python Redis scripts and Streamlit demo
-README_bk.md         Redis setup and command notes
-Redis_Tech.md        Redis concepts and system design notes
-sentinel.conf        Example Sentinel config
+Redis-Cache-Demo/       Spring Boot 3 Maven: cache penetration, stampede, logical expiry
+Redis-RateLimit-Demo/   Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
+Redis-Test/             Java Gradle sample: Jedis, Sentinel, RedisTemplate config
+Redis-Lock-Demo/        Spring Boot 3 Maven: custom Redis lock and Redisson RLock
+Redis-Bloom-Filter/     Java Maven Bloom filter module
+Redis-Python/           Python Redis scripts and Streamlit demo
+Redis_Tech.md           Redis concepts and system design notes
+sentinel.conf           Example Sentinel config
 ```
 
-## Run Cache-Demo
+## Run Redis-Cache-Demo
 
-`Cache-Demo` is a Spring Boot 3 Maven project. It exposes a REST API that demonstrates three classic Redis caching problems and their solutions side-by-side.
+`Redis-Cache-Demo` is a Spring Boot 3 Maven project. It exposes a REST API that demonstrates three classic Redis caching problems and their solutions side-by-side.
 
 ### What it demonstrates
 
@@ -77,7 +76,7 @@ redis-server            # start with defaults
 
 ### Configuration
 
-Edit `Cache-Demo/src/main/resources/application.yml` to match your Redis setup:
+Edit `Redis-Cache-Demo/src/main/resources/application.yml` to match your Redis setup:
 
 ```yaml
 spring:
@@ -92,7 +91,7 @@ spring:
 ### Build and run
 
 ```bash
-cd Cache-Demo
+cd Redis-Cache-Demo
 mvn spring-boot:run
 ```
 
@@ -100,7 +99,7 @@ Or build a jar and run it:
 
 ```bash
 mvn clean package -DskipTests
-java -jar target/cache-demo-0.0.1-SNAPSHOT.jar
+java -jar target/redis-cache-demo-0.0.1-SNAPSHOT.jar
 ```
 
 The server starts on `http://localhost:8080`.
@@ -212,9 +211,9 @@ redis-cli get "product:1"           # inspect a cached product
 redis-cli ttl "product:1"           # check remaining TTL
 ```
 
-## Run Redis-RateLimit
+## Run Redis-RateLimit-Demo
 
-`Redis-RateLimit` is a Spring Boot 3 Maven demo for annotation-based API rate limiting. It uses:
+`Redis-RateLimit-Demo` is a Spring Boot 3 Maven demo for annotation-based API rate limiting. It uses:
 
 - `@RateLimit` on controller methods to declare the operation key, window, and request limit.
 - Spring AOP to enforce limits before the endpoint runs.
@@ -252,7 +251,7 @@ PONG
 
 ### Configuration
 
-The default configuration is in `Redis-RateLimit/src/main/resources/application.yml`:
+The default configuration is in `Redis-RateLimit-Demo/src/main/resources/application.yml`:
 
 ```yaml
 spring:
@@ -275,14 +274,14 @@ mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
 ### Build and test
 
 ```bash
-cd Redis-RateLimit
+cd Redis-RateLimit-Demo
 mvn test
 ```
 
 ### Run
 
 ```bash
-cd Redis-RateLimit
+cd Redis-RateLimit-Demo
 mvn spring-boot:run
 ```
 
@@ -446,9 +445,9 @@ redis-cli -p 26379 info sentinel
 
 The Java examples expect Sentinel master name `mymaster`. Keep `sentinel.conf` and the Java code aligned if you rename it.
 
-## Run RedisLock-Demo
+## Run Redis-Lock-Demo
 
-`RedisLock-Demo` contains two distributed-lock styles:
+`Redis-Lock-Demo` contains two distributed-lock styles:
 
 - `StockService`: custom Redis lock using `SET NX EX`, UUID lock values, `Duration` TTLs, bounded retry, watchdog renewal, and Lua compare-and-delete unlock.
 - `OrderService`: Redisson `RLock` for product stock deduction, plus a custom `RedisLock` user-order flow to block duplicate concurrent submissions.
@@ -456,28 +455,28 @@ The Java examples expect Sentinel master name `mymaster`. Keep `sentinel.conf` a
 Build:
 
 ```bash
-cd RedisLock-Demo
+cd Redis-Lock-Demo
 mvn test
 ```
 
 Run the Redis-backed concurrency integration test when Redis is available:
 
 ```bash
-cd RedisLock-Demo
+cd Redis-Lock-Demo
 mvn test -Dredis.integration=true
 ```
 
 Run:
 
 ```bash
-cd RedisLock-Demo
+cd Redis-Lock-Demo
 mvn spring-boot:run
 ```
 
-The default `RedisLock-Demo/src/main/resources/application.yml` assumes local Redis has no password. If your Redis requires auth, pass it explicitly:
+The default `Redis-Lock-Demo/src/main/resources/application.yml` assumes local Redis has no password. If your Redis requires auth, pass it explicitly:
 
 ```bash
-cd RedisLock-Demo
+cd Redis-Lock-Demo
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.data.redis.password=123456"
 ```
 
@@ -518,7 +517,7 @@ The custom lock implementation in `RedisLock.java` must follow three rules:
 Run the app and keep Redis CLI open:
 
 ```bash
-cd RedisLock-Demo
+cd Redis-Lock-Demo
 mvn spring-boot:run
 ```
 
@@ -650,8 +649,10 @@ redis-cli -p 6380 set 'item:1' '{"title":"Payroll setup","description":"Guide fo
 Run all available compile checks:
 
 ```bash
-cd Redis-Test && ./gradlew test
-cd ../RedisLock-Demo && mvn test
+cd Redis-Cache-Demo && mvn test
+cd ../Redis-RateLimit-Demo && mvn test
+cd ../Redis-Test && ./gradlew test
+cd ../Redis-Lock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
 cd ../Redis-Python && python3 -m py_compile usecase/connection/sentinel.py usecase/pubsub_search/redis_sampled.py usecase/recommendation/streamlit_sampled.py
 ```
