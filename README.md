@@ -4,9 +4,9 @@ This repo contains Redis notes and six runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
-- `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
+- `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
 - `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
 
 Older Redis command notes are kept in `README_bk.md`, and the deeper study notes are in `Redis_Tech.md`.
@@ -38,14 +38,14 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ## Project Layout
 
 ```text
-Redis-Cache-Demo/       Spring Boot 3 Maven: cache penetration, stampede, logical expiry
-Redis-RateLimit-Demo/   Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
-Redis-Test/             Java Gradle sample: Jedis, Sentinel, RedisTemplate config
-Redis-Lock-Demo/        Spring Boot 3 Maven: custom Redis lock and Redisson RLock
-Redis-Bloom-Filter/     Java Maven Bloom filter module
-Redis-Python/           Python Redis scripts and Streamlit demo
-Redis_Tech.md           Redis concepts and system design notes
-sentinel.conf           Example Sentinel config
+Redis-Cache-Demo/    Spring Boot 3 Maven: cache penetration, stampede, logical expiry
+Redis-RateLimit-Demo/  Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
+Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
+Redis-Lock-Demo/      Spring Boot 3 Maven: custom Redis lock and Redisson RLock
+Redis-Bloom-Filter/  Java Maven Bloom filter module
+Redis-Python/        Python Redis scripts and Streamlit demo
+Redis_Tech.md        Redis concepts and system design notes
+sentinel.conf        Example Sentinel config
 ```
 
 ## Run Redis-Cache-Demo
@@ -286,6 +286,18 @@ mvn spring-boot:run
 ```
 
 The server starts on `http://localhost:8080`.
+
+If startup fails with `Port 8080 was already in use`, either stop the process using that port or start this demo on another port:
+
+```bash
+# See what is using 8080
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+
+# Run this demo on 8082 instead
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
+```
+
+When using a different port, replace `8080` with that port in the curl examples below.
 
 ### Try the rate-limited endpoint
 

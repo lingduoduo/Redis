@@ -115,29 +115,18 @@ public class StockService {
         String stockKey = RedisKeyBuilder.stockKey(productId);
         String rawStock = redisTemplate.opsForValue().get(stockKey);
         
-        // If product doesn't exist or stock is null, treat as 0
-        if (rawStock == null) {
-            log.warn("Stock not found for product: {}", productId);
+        int stock = StockValidator.parseAndValidate(rawStock, productId);
+
+        // Check if stock is sufficient
+        if (!StockValidator.isSufficientStock(stock)) {
+            log.info("Out of stock: product={}", productId);
             return false;
         }
 
-        try {
-            int stock = Integer.parseInt(rawStock);
-            
-            // Check if stock is sufficient
-            if (!StockValidator.isSufficientStock(stock)) {
-                log.info("Out of stock: product={}", productId);
-                return false;
-            }
-
-            // Deduct one unit and save back to Redis
-            int newStock = stock - 1;
-            redisTemplate.opsForValue().set(stockKey, String.valueOf(newStock));
-            log.info("Purchased: product={}, remaining={}", productId, newStock);
-            return true;
-        } catch (NumberFormatException e) {
-            log.error("Invalid stock format for product {}: {}", productId, rawStock, e);
-            return false;
-        }
+        // Deduct one unit and save back to Redis
+        int newStock = stock - 1;
+        redisTemplate.opsForValue().set(stockKey, String.valueOf(newStock));
+        log.info("Purchased: product={}, remaining={}", productId, newStock);
+        return true;
     }
 }
