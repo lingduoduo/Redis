@@ -341,6 +341,15 @@ cd RedisLock-Demo
 mvn spring-boot:run
 ```
 
+The default `RedisLock-Demo/src/main/resources/application.yml` assumes local Redis has no password. If your Redis requires auth, pass it explicitly:
+
+```bash
+cd RedisLock-Demo
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.data.redis.password=123456"
+```
+
+If startup fails with `ERR AUTH <password> called without any password configured`, your app is sending a password to a no-auth Redis server. Remove any `spring.data.redis.password` override, unset `SPRING_DATA_REDIS_PASSWORD`, and run again.
+
 Custom Redis lock stock flow:
 
 ```bash
