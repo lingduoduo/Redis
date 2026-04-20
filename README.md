@@ -430,50 +430,63 @@ curl -b /tmp/redis-session.cookies http://localhost:8080/auth/me
 
 ### Run two instances
 
-Start node A:
+**Step 1 — Build the project:**
 
 ```bash
 cd Redis-HttpSession-Demo
-mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.node=node-a"
+mvn clean package -DskipTests
 ```
 
-Start node B in another terminal:
+**Step 2 — Start node-a on port 8080 (Terminal 1):**
 
 ```bash
 cd Redis-HttpSession-Demo
-mvn spring-boot:run \
-  -Dspring-boot.run.jvmArguments="-Dserver.node=node-b" \
-  -Dspring-boot.run.arguments="--server.port=8083"
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.port=8080 -Dserver.node=node-a"
 ```
 
-Login through node A:
+**Step 3 — Start node-b on port 8081 (Terminal 2):**
 
 ```bash
-curl -i -c /tmp/redis-session.cookies \
+cd Redis-HttpSession-Demo
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.port=8081 -Dserver.node=node-b"
+```
+
+**Step 4 — Login on node-a and save the session cookie:**
+
+```bash
+curl -c /tmp/cookies.txt -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"alice"}' \
-  http://localhost:8080/auth/login
+  -d '{"username":"alice"}'
 ```
 
-Read the same session through node B:
+Note the `sessionId` in the response.
+
+**Step 5 — Read the session on node-b using the same cookie:**
 
 ```bash
-curl -b /tmp/redis-session.cookies http://localhost:8083/auth/me
+curl -b /tmp/cookies.txt http://localhost:8081/auth/me
 ```
 
-The response should still show `"username":"alice"` while `serverNode` changes to `node-b`, proving the session is stored in Redis rather than local process memory.
+The response should show `"username":"alice"` while `serverNode` is `node-b`, proving the session was read from Redis rather than local process memory.
 
-Inspect session keys:
+**Step 6 — Logout on node-b:**
+
+```bash
+curl -b /tmp/cookies.txt -X POST http://localhost:8081/auth/logout
+```
+
+**Step 7 — Confirm the session is gone on node-a:**
+
+```bash
+curl -b /tmp/cookies.txt http://localhost:8080/auth/me
+# "authenticated": false — session was invalidated in Redis
+```
+
+**Inspect Redis session keys at any point:**
 
 ```bash
 redis-cli keys "spring:session:demo:*"
-```
-
-Logout and verify the session is invalidated:
-
-```bash
-curl -b /tmp/redis-session.cookies -X POST http://localhost:8083/auth/logout
-curl -b /tmp/redis-session.cookies http://localhost:8080/auth/me
+redis-cli hgetall "spring:session:demo:sessions:<sessionId>"
 ```
 
 ## Run Redis-Test
