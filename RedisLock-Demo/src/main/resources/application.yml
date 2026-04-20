@@ -1,0 +1,54 @@
+# Redis Connection Configuration
+spring:
+  data:
+    redis:
+      # Redis server connection details
+      host: localhost
+      port: 6379
+      password: # Set if Redis has authentication enabled
+      database: 0
+      
+      # Connection timeout and command execution timeout
+      timeout: 3000ms
+      
+      # Lettuce connection pool optimization
+      lettuce:
+        pool:
+          # Maximum active connections in pool (tuned for flash sales)
+          max-active: 32
+          # Maximum idle connections (prevent connection leaks)
+          max-idle: 16
+          # Minimum idle connections to maintain (warm pool)
+          min-idle: 4
+          # Maximum wait time when pool is exhausted
+          max-wait: 2000ms
+          # Enable connection validation
+          test-on-borrow: true
+          test-on-return: false
+
+# Server configuration
+server:
+  port: 8081
+  # Optimize for high-concurrency flash sale scenarios
+  tomcat:
+    # Number of accept threads
+    accept-count: 100
+    # Maximum concurrent connections
+    max-connections: 200
+    # Thread pool size for request handling
+    threads:
+      max: 100
+      min-spare: 10
+    # Keep-alive timeout for persistent connections
+    keep-alive-timeout: 60000ms
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.example.redislock: DEBUG
+    org.springframework.data.redis: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+

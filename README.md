@@ -1,9 +1,10 @@
 # Redis Examples
 
-This repo contains Redis notes and four runnable example areas:
+This repo contains Redis notes and five runnable example areas:
 
 - `Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
+- `RedisLock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
 
@@ -13,7 +14,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Cache-Demo` and `Redis-Bloom-Filter`)
+- Maven (`Cache-Demo`, `RedisLock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -38,6 +39,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ```text
 Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
 Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
+RedisLock-Demo/      Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/  Java Maven Bloom filter module
 Redis-Python/        Python Redis scripts and Streamlit demo
 README_bk.md         Redis setup and command notes
@@ -311,6 +313,111 @@ redis-cli -p 26379 info sentinel
 
 The Java examples expect Sentinel master name `mymaster`. Keep `sentinel.conf` and the Java code aligned if you rename it.
 
+## Run RedisLock-Demo
+
+`RedisLock-Demo` contains two distributed-lock styles:
+
+- `StockService`: custom Redis lock using `SET NX EX`, UUID lock values, `Duration` TTLs, bounded retry, watchdog renewal, and Lua compare-and-delete unlock.
+- `OrderService`: Redisson `RLock` for product stock deduction, plus a custom `RedisLock` user-order flow to block duplicate concurrent submissions.
+
+Build:
+
+```bash
+cd RedisLock-Demo
+mvn test
+```
+
+Run the Redis-backed concurrency integration test when Redis is available:
+
+```bash
+cd RedisLock-Demo
+mvn test -Dredis.integration=true
+```
+
+Run:
+
+```bash
+cd RedisLock-Demo
+mvn spring-boot:run
+```
+
+Custom Redis lock stock flow:
+
+```bash
+curl -X POST 'http://localhost:8081/flash/init/1001?quantity=10'
+curl -X POST 'http://localhost:8081/flash/buy/1001'
+curl 'http://localhost:8081/flash/stock/1001'
+```
+
+Redisson order flow:
+
+```bash
+curl -X POST 'http://localhost:8081/orders/init/1001?quantity=10'
+curl -X POST 'http://localhost:8081/orders/1001?userId=42'
+```
+
+Custom Redis lock user-order flow:
+
+```bash
+curl -X POST 'http://localhost:8081/orders/users/42'
+curl 'http://localhost:8081/order/42'
+```
+
+The Redisson example stores stock in `flash:stock:{productId}`, locks stock with `lock:stock:{productId}`, and stores order records in `flash:orders:{productId}`.
+
+### Test the custom RedisLock guarantees
+
+The custom lock implementation in `RedisLock.java` must follow three rules:
+
+- Acquire with `SET NX EX`: `StringRedisTemplate.setIfAbsent(key, uuid, Duration)` writes the value only when the key does not exist and sets the TTL in the same Redis operation.
+- Release with Lua: `unlock(key, token)` runs a compare-and-delete script so the owner check and `DEL` happen atomically.
+- Store a UUID value: `tryLockWithToken(...)` returns a UUID token, and callers must pass the same token to `unlock(...)` to avoid deleting another request's lock.
+
+Run the app and keep Redis CLI open:
+
+```bash
+cd RedisLock-Demo
+mvn spring-boot:run
+```
+
+In another terminal:
+
+```bash
+redis-cli
+```
+
+Check `SET NX EX` and UUID value:
+
+```bash
+curl -X POST 'http://localhost:8081/flash/init/1001?quantity=2'
+curl -X POST 'http://localhost:8081/flash/buy/1001'
+redis-cli get lock:flash:1001
+redis-cli ttl lock:flash:1001
+```
+
+During the request, `get lock:flash:1001` should show a UUID-like value and `ttl lock:flash:1001` should be positive. If the request already finished, the key may be gone because `finally` released it.
+
+Check Lua prevents deleting someone else's lock:
+
+```bash
+redis-cli set lock:order:test owner-a ex 30 nx
+redis-cli eval "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end" 1 lock:order:test owner-b
+redis-cli exists lock:order:test
+redis-cli eval "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end" 1 lock:order:test owner-a
+redis-cli exists lock:order:test
+```
+
+Expected result: the `owner-b` release returns `0` and the key still exists; the `owner-a` release returns `1` and the key is deleted.
+
+Check duplicate user-order requests are blocked by the UUID lock:
+
+```bash
+curl 'http://localhost:8081/order/42' &
+curl 'http://localhost:8081/order/42'
+```
+
+Expected result: one request creates the order, while the overlapping request receives a service-busy response such as `Too many requests`.
+
 ## Run Redis-Bloom-Filter
 
 Build and test the Maven module:
@@ -402,6 +509,7 @@ Run all available compile checks:
 
 ```bash
 cd Redis-Test && ./gradlew test
+cd ../RedisLock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
 cd ../Redis-Python && python3 -m py_compile usecase/connection/sentinel.py usecase/pubsub_search/redis_sampled.py usecase/recommendation/streamlit_sampled.py
 ```
