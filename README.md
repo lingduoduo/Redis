@@ -1,9 +1,10 @@
 # Redis Examples
 
-This repo contains Redis notes and six runnable example areas:
+This repo contains Redis notes and seven runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
+- `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating Redis-backed `HttpSession` sharing across app instances.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
@@ -15,7 +16,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Redis-Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -38,14 +39,15 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ## Project Layout
 
 ```text
-Redis-Cache-Demo/    Spring Boot 3 Maven: cache penetration, stampede, logical expiry
-Redis-RateLimit-Demo/  Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
-Redis-Test/          Java Gradle sample: Jedis, Sentinel, RedisTemplate config
-Redis-Lock-Demo/      Spring Boot 3 Maven: custom Redis lock and Redisson RLock
-Redis-Bloom-Filter/  Java Maven Bloom filter module
-Redis-Python/        Python Redis scripts and Streamlit demo
-Redis_Tech.md        Redis concepts and system design notes
-sentinel.conf        Example Sentinel config
+Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
+Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
+Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
+Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
+Redis-Bloom-Filter/        Java Maven Bloom filter module
+Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
+Redis-Python/              Python Redis scripts and Streamlit demo
+Redis_Tech.md              Redis concepts and system design notes
+sentinel.conf              Example Sentinel config
 ```
 
 ## Run Redis-Cache-Demo
@@ -353,6 +355,126 @@ redis-cli zcard "rl:ip:127.0.0.1:order:create"
 ```
 
 When requests pass through a proxy that sets `X-Forwarded-For`, the IP bucket uses the first forwarded address.
+
+## Run Redis-HttpSession-Demo
+
+`Redis-HttpSession-Demo` is a Spring Boot 3 Maven demo for sharing servlet `HttpSession` state through Redis. It uses Spring Session Data Redis so multiple app instances can read the same login session when the client sends the same `SESSION` cookie.
+
+### What it demonstrates
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | Creates or reads the current session and returns the current server node |
+| `POST /auth/login` | Stores `loginUser`, `loginTime`, and `loginTraceId` in the Redis-backed session |
+| `GET /auth/me` | Reads the current session attributes |
+| `POST /auth/logout` | Invalidates the current session and removes it from Redis |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Configuration
+
+The default configuration is in `Redis-HttpSession-Demo/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  session:
+    store-type: redis
+    timeout: 30m
+    redis:
+      namespace: spring:session:demo
+```
+
+The app defaults to port `8080`. If another demo is already using it, pass a different port:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
+```
+
+### Build and test
+
+```bash
+cd Redis-HttpSession-Demo
+mvn test
+```
+
+### Run one instance
+
+```bash
+cd Redis-HttpSession-Demo
+mvn spring-boot:run
+```
+
+Login and save the session cookie:
+
+```bash
+curl -i -c /tmp/redis-session.cookies \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice"}' \
+  http://localhost:8080/auth/login
+```
+
+Read the session with the saved cookie:
+
+```bash
+curl -b /tmp/redis-session.cookies http://localhost:8080/auth/me
+```
+
+### Run two instances
+
+Start node A:
+
+```bash
+cd Redis-HttpSession-Demo
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.node=node-a"
+```
+
+Start node B in another terminal:
+
+```bash
+cd Redis-HttpSession-Demo
+mvn spring-boot:run \
+  -Dspring-boot.run.jvmArguments="-Dserver.node=node-b" \
+  -Dspring-boot.run.arguments="--server.port=8083"
+```
+
+Login through node A:
+
+```bash
+curl -i -c /tmp/redis-session.cookies \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice"}' \
+  http://localhost:8080/auth/login
+```
+
+Read the same session through node B:
+
+```bash
+curl -b /tmp/redis-session.cookies http://localhost:8083/auth/me
+```
+
+The response should still show `"username":"alice"` while `serverNode` changes to `node-b`, proving the session is stored in Redis rather than local process memory.
+
+Inspect session keys:
+
+```bash
+redis-cli keys "spring:session:demo:*"
+```
+
+Logout and verify the session is invalidated:
+
+```bash
+curl -b /tmp/redis-session.cookies -X POST http://localhost:8083/auth/logout
+curl -b /tmp/redis-session.cookies http://localhost:8080/auth/me
+```
 
 ## Run Redis-Test
 
@@ -663,9 +785,10 @@ Run all available compile checks:
 ```bash
 cd Redis-Cache-Demo && mvn test
 cd ../Redis-RateLimit-Demo && mvn test
-cd ../Redis-Test && ./gradlew test
+cd ../Redis-HttpSession-Demo && mvn test
 cd ../Redis-Lock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
+cd ../Redis-Test && ./gradlew test
 cd ../Redis-Python && python3 -m py_compile usecase/connection/sentinel.py usecase/pubsub_search/redis_sampled.py usecase/recommendation/streamlit_sampled.py
 ```
 

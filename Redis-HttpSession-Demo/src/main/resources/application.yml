@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: redis-http-session-demo
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3s
+  session:
+    store-type: redis
+    timeout: 30m
+    redis:
+      namespace: spring:session:demo
+
+server:
+  port: 8080
