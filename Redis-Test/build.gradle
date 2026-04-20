@@ -12,14 +12,14 @@ repositories {
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
-    implementation 'redis.clients:jedis:4.3.1'
     implementation 'ch.qos.logback:logback-classic:1.2.11'
-    implementation 'org.slf4j:slf4j-api:2.0.9'
-    implementation 'org.slf4j:slf4j-simple:2.0.9'
     implementation 'redis.clients:jedis:4.4.3'
+    implementation 'org.yaml:snakeyaml:2.2'
+    implementation 'org.springframework:spring-context:5.3.31'
+    implementation 'org.springframework.data:spring-data-redis:2.7.18'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.5'
 }
 
 test {
     useJUnitPlatform()
 }
-

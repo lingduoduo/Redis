@@ -12,6 +12,7 @@ public class JedisSentinelExample {
     private static final Logger logger = LoggerFactory.getLogger(JedisSentinelExample.class);
 
     public static void main(String[] args) {
+        RedisSettings settings = RedisSettings.load();
         String masterName = "mymaster";
 
         Set<String> sentinels = new HashSet<>();
@@ -19,15 +20,19 @@ public class JedisSentinelExample {
         sentinels.add("127.0.0.1:26380");
         sentinels.add("127.0.0.1:26381");
 
-        // Create the Sentinel pool
-        JedisSentinelPool jedisSentinelPool = new JedisSentinelPool(masterName, sentinels);
+        JedisSentinelPool jedisSentinelPool = new JedisSentinelPool(
+                masterName,
+                sentinels,
+                settings.poolConfig(),
+                settings.timeoutMillis(),
+                settings.timeoutMillis(),
+                settings.password(),
+                settings.database()
+        );
 
         try {
             while (true) {
-                Jedis jedis = null;
-                try {
-                    jedis = jedisSentinelPool.getResource();
-
+                try (Jedis jedis = jedisSentinelPool.getResource()) {
                     int index = new Random().nextInt(100000);
                     String key = "k-" + index;
                     String value = "v-" + index;
@@ -38,10 +43,6 @@ public class JedisSentinelExample {
                     TimeUnit.MILLISECONDS.sleep(10);
                 } catch (Exception e) {
                     logger.error("Error in Redis operation: {}", e.getMessage(), e);
-                } finally {
-                    if (jedis != null) {
-                        jedis.close();
-                    }
                 }
             }
         } finally {
