@@ -1,6 +1,6 @@
 # Redis Examples
 
-This repo contains Redis notes and ten runnable example areas:
+This repo contains Redis notes and eleven runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
@@ -8,6 +8,7 @@ This repo contains Redis notes and ten runnable example areas:
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
+- `Redis-Geo-Demo`: Spring Boot 3 REST service demonstrating Redis GEO nearby-shop search with coordinates and distances.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
@@ -48,6 +49,7 @@ Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
+Redis-Geo-Demo/            Spring Boot 3 Maven: Redis GEO nearby-shop search
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/        Java Maven Bloom filter module
 Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
@@ -968,6 +970,170 @@ redis-cli bitcount sign:42:202604
 redis-cli bitfield sign:42:202604 get u20 0
 ```
 
+## Run Redis-Geo-Demo
+
+`Redis-Geo-Demo` is a Spring Boot 3 Maven demo for nearby-shop lookup with Redis GEO commands. It stores shop coordinates in one GEO set and returns nearby shops sorted by distance.
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `GEOADD` | Store shop longitude/latitude by shop ID |
+| `GEORADIUS` | Query shops within a radius from a coordinate |
+| `WITHDIST` | Return distance from the query coordinate |
+| `WITHCOORD` | Return stored longitude/latitude for each shop |
+| `GEOPOS` / `GEODIST` | Inspect stored positions and distances in Redis CLI |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Configuration
+
+The default configuration is in `Redis-Geo-Demo/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3s
+
+server:
+  port: 8080
+```
+
+### Build and test
+
+```bash
+cd Redis-Geo-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-Geo-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`. If another demo is using port `8080`, run this one on a different port:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8086"
+```
+
+### Nearby shop use case
+
+**Step 1 — Add a few shops near Manhattan:**
+
+```bash
+curl -X POST http://localhost:8080/geo/shops \
+  -H "Content-Type: application/json" \
+  -d '{"shopId":"empire-coffee","lng":-73.9857,"lat":40.7484}'
+
+curl -X POST http://localhost:8080/geo/shops \
+  -H "Content-Type: application/json" \
+  -d '{"shopId":"bryant-snacks","lng":-73.9832,"lat":40.7536}'
+
+curl -X POST http://localhost:8080/geo/shops \
+  -H "Content-Type: application/json" \
+  -d '{"shopId":"chelsea-books","lng":-74.0018,"lat":40.7411}'
+```
+
+Each successful add returns a confirmation with the stored coordinates:
+
+```json
+{
+  "message": "shop added",
+  "key": "geo:shop",
+  "shopId": "empire-coffee",
+  "lng": -73.9857,
+  "lat": 40.7484
+}
+```
+
+**Step 2 — Find the nearest shops within 2 km:**
+
+```bash
+curl "http://localhost:8080/geo/nearby?lng=-73.9851&lat=40.7580&radiusKm=2&limit=5"
+```
+
+The response echoes the query parameters and returns shops sorted by ascending distance:
+
+```json
+{
+  "queryLng": -73.9851,
+  "queryLat": 40.758,
+  "radiusKm": 2.0,
+  "limit": 5,
+  "shops": [
+    {
+      "shopId": "bryant-snacks",
+      "distanceKm": 0.51,
+      "lng": -73.9832,
+      "lat": 40.7536
+    },
+    {
+      "shopId": "empire-coffee",
+      "distanceKm": 0.88,
+      "lng": -73.9857,
+      "lat": 40.7484
+    }
+  ]
+}
+```
+
+**Step 3 — Try with a larger radius to include all three shops:**
+
+```bash
+curl "http://localhost:8080/geo/nearby?lng=-73.9851&lat=40.7580&radiusKm=5&limit=10"
+```
+
+### Validation rules
+
+Query parameters are validated at the API boundary before the Redis call is made:
+
+| Parameter | Constraint | Default |
+|---|---|---|
+| `lng` | `-180.0` to `180.0` | required |
+| `lat` | `-90.0` to `90.0` | required |
+| `radiusKm` | `0.001` to `1000.0` | `5` |
+| `limit` | `1` to `100` | `10` |
+
+A request outside these ranges returns `400 Bad Request` with a validation error before touching Redis.
+
+### Full endpoint reference
+
+| Method | URL | Description |
+|---|---|---|
+| `POST` | `/geo/shops` | Add a shop with its coordinates to the GEO set |
+| `GET` | `/geo/nearby` | Return nearby shops sorted by distance |
+
+### Inspect Redis keys
+
+```bash
+# List all members with their internal geohash scores
+redis-cli zrange geo:shop 0 -1 withscores
+
+# Look up stored coordinates for specific shops
+redis-cli geopos geo:shop empire-coffee bryant-snacks chelsea-books
+
+# Distance between two shops
+redis-cli geodist geo:shop empire-coffee bryant-snacks km
+
+# Raw radius query matching what the API runs
+redis-cli georadius geo:shop -73.9851 40.7580 2 km withdist withcoord asc count 5
+```
+
 ## Run Redis-Test
 
 `Redis-Test` is a plain Java Gradle project. It is not a Spring Boot app, but it includes Spring-compatible Redis examples:
@@ -1281,6 +1447,7 @@ cd ../Redis-HttpSession-Demo && mvn test
 cd ../Redis-RankService-Demo && mvn test
 cd ../Redis-MQ-Demo && mvn test
 cd ../Redis-BitMap-Demo && mvn test
+cd ../Redis-Geo-Demo && mvn test
 cd ../Redis-Lock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
 cd ../Redis-Test && ./gradlew test
