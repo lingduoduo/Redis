@@ -1,11 +1,12 @@
 # Redis Examples
 
-This repo contains Redis notes and eight runnable example areas:
+This repo contains Redis notes and nine runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating Redis-backed `HttpSession` sharing across app instances.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
+- `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
@@ -44,6 +45,7 @@ Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, log
 Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
+Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/        Java Maven Bloom filter module
 Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
@@ -642,6 +644,238 @@ redis-cli get article:view:1
 redis-cli get article:like:1
 redis-cli get article:pv:1
 redis-cli scard "article:uv:1:$(date +%Y-%m-%d)"
+```
+
+## Run Redis-MQ-Demo
+
+`Redis-MQ-Demo` is a Spring Boot 3 Maven demo for Redis-backed order messaging. It has two independent use cases:
+
+- **Order event stream** — writes order IDs to a Redis Stream, consumes them through a consumer group, acknowledges processed entries, and keeps a recent processed-order audit list.
+- **Delayed order close** — schedules unpaid orders in a sorted set with the trigger timestamp as score, claims due entries with an atomic remove, and keeps a recent closed-order audit list.
+
+### What it demonstrates
+
+| Redis feature | Used for |
+|---|---|
+| `XADD` | Append order events to `stream:order` |
+| `XGROUP CREATE` | Bootstrap consumer group on first startup |
+| `XREADGROUP` | Reliable asynchronous order consumption |
+| `XACK` | Acknowledge successfully processed stream records |
+| `XPENDING` | Observe unacknowledged messages |
+| `XDEL` | Remove the transient bootstrap entry after group creation |
+| `ZADD` | Schedule delayed order-close jobs with score = trigger epoch ms |
+| `ZRANGEBYSCORE` + `ZREM` | Claim due delayed jobs; ZREM acts as atomic ownership check |
+| `LPUSH` + `LTRIM` (pipelined) | Append and cap recent processed/closed audit lists in one round trip |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Configuration
+
+The default configuration is in `Redis-MQ-Demo/src/main/resources/application.yml`:
+
+```yaml
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      connect-timeout: 2s
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+```
+
+Lettuce connection pooling requires `commons-pool2` on the classpath, which is already declared in `pom.xml`.
+
+If port `8080` is already in use, override it at startup:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8084"
+```
+
+### Build and test
+
+```bash
+cd Redis-MQ-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-MQ-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`. On startup the app creates consumer group `order-group` on `stream:order` (MKSTREAM — no pre-existing stream required).
+
+### Order event stream use case
+
+**Step 1 — Publish an order event:**
+
+```bash
+curl -X POST http://localhost:8080/mq/stream/order \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"order-1001"}'
+```
+
+Expected response:
+
+```json
+{
+  "message": "stream message sent",
+  "stream": "stream:order",
+  "messageId": "1713600000000-0",
+  "orderId": "order-1001"
+}
+```
+
+**Step 2 — Publish a few more events:**
+
+```bash
+curl -s -X POST http://localhost:8080/mq/stream/order \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"order-1002"}' | jq .
+
+curl -s -X POST http://localhost:8080/mq/stream/order \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"order-1003"}' | jq .
+```
+
+**Step 3 — Check stream size and consumer group metadata:**
+
+```bash
+curl http://localhost:8080/mq/stream/info
+```
+
+Expected response:
+
+```json
+{
+  "stream": "stream:order",
+  "size": 3,
+  "group": "order-group",
+  "consumer": "consumer-a"
+}
+```
+
+**Step 4 — Wait for the consumer to run (scheduled every 2 s), then check processed orders:**
+
+```bash
+curl "http://localhost:8080/mq/stream/processed?n=10"
+```
+
+Expected response (most recent first):
+
+```json
+["order-1003", "order-1002", "order-1001"]
+```
+
+The `n` parameter is capped at 100.
+
+### Delayed order close use case
+
+**Step 1 — Schedule an order to close after 5 seconds:**
+
+```bash
+curl -X POST http://localhost:8080/mq/delay/order \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"order-2001","delayMs":5000}'
+```
+
+Expected response:
+
+```json
+{
+  "message": "delay job scheduled",
+  "queue": "delay:order:close",
+  "orderId": "order-2001",
+  "delayMs": 5000
+}
+```
+
+**Step 2 — Schedule a second order with the default 30-minute delay:**
+
+```bash
+curl -X POST http://localhost:8080/mq/delay/order \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"order-2002","delayMs":1800000}'
+```
+
+**Step 3 — Peek at pending jobs (sorted by trigger time, earliest first):**
+
+```bash
+curl "http://localhost:8080/mq/delay/peek?n=10"
+```
+
+Expected response:
+
+```json
+["order-2001", "order-2002"]
+```
+
+**Step 4 — Wait 5 seconds for the scanner to claim `order-2001`, then check closed orders:**
+
+```bash
+curl "http://localhost:8080/mq/delay/closed?n=10"
+```
+
+Expected response:
+
+```json
+["order-2001"]
+```
+
+`order-2002` remains in the sorted set until its trigger time is reached.
+
+### Full endpoint reference
+
+| Method | URL | Description |
+|---|---|---|
+| `POST` | `/mq/stream/order` | Publish an order event to the Redis Stream |
+| `GET` | `/mq/stream/info` | Stream size and consumer group metadata |
+| `GET` | `/mq/stream/processed?n=N` | Last N processed order IDs (max 100) |
+| `POST` | `/mq/delay/order` | Schedule an order-close job with `delayMs` |
+| `GET` | `/mq/delay/peek?n=N` | Top N pending delayed jobs by trigger time (max 100) |
+| `GET` | `/mq/delay/closed?n=N` | Last N closed order IDs (max 100) |
+
+### Inspect Redis keys
+
+```bash
+# Stream internals
+redis-cli xlen stream:order
+redis-cli xinfo stream stream:order
+redis-cli xinfo groups stream:order
+redis-cli xrange stream:order - +
+
+# Processed audit list
+redis-cli lrange stream:order:processed 0 9
+
+# Delay queue (score = epoch ms trigger time)
+redis-cli zrange delay:order:close 0 -1 withscores
+
+# Closed order audit list
+redis-cli lrange delay:order:closed 0 9
+```
+
+Confirm a claimed order is removed from the sorted set after closure:
+
+```bash
+redis-cli zscore delay:order:close order-2001
+# (nil) — claimed and removed by the scanner
 ```
 
 ## Run Redis-Test
