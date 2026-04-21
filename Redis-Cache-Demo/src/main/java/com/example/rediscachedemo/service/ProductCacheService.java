@@ -5,9 +5,11 @@ import com.example.rediscachedemo.model.RedisData;
 import com.example.rediscachedemo.repository.ProductRepository;
 import com.example.rediscachedemo.util.CacheConstants;
 import com.google.common.hash.BloomFilter;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -40,30 +42,25 @@ public class ProductCacheService {
     private static final String CACHE_PREFIX    = "product:";
     private static final String LOGICAL_PREFIX  = "product:logical:";
     private static final String LOCK_PREFIX     = "lock:product:";
-    private static final long   CACHE_TTL_MIN   = 10;
-    private static final long   NULL_TTL_MIN    = 2;
     private static final long   LOGICAL_TTL_MIN = 30;
-    private static final long   LOCK_TTL_SEC    = 10;
-    private static final int    MAX_RETRIES     = 5;
-    private static final long   RETRY_SLEEP_MS  = 50;
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ProductRepository productRepository;
     private final BloomFilter<String> productBloomFilter;
 
-    private final ExecutorService rebuildExecutor = Executors.newFixedThreadPool(4);
+    @Value("${app.cache.rebuild-threads:4}")
+    private int rebuildThreads;
+
+    private ExecutorService rebuildExecutor;
+
+    @PostConstruct
+    private void init() {
+        rebuildExecutor = Executors.newFixedThreadPool(rebuildThreads);
+    }
 
     @PreDestroy
     void shutdownExecutor() {
-        rebuildExecutor.shutdown();
-        try {
-            if (!rebuildExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                rebuildExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            rebuildExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+        CacheConstants.gracefulShutdown(rebuildExecutor);
     }
 
     // -------------------------------------------------------------------------
@@ -83,7 +80,7 @@ public class ProductCacheService {
         }
 
         String lockKey = LOCK_PREFIX + id;
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        for (int attempt = 0; attempt < CacheConstants.MAX_RETRIES; attempt++) {
             String token = tryLock(lockKey);
             if (token != null) {
                 try {
@@ -95,11 +92,11 @@ public class ProductCacheService {
 
                     Product product = productRepository.findById(id);
                     if (product == null) {
-                        redisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, NULL_TTL_MIN, TimeUnit.MINUTES);
+                        redisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, CacheConstants.NULL_TTL_MIN, TimeUnit.MINUTES);
                         return null;
                     }
 
-                    long ttl = CACHE_TTL_MIN + ThreadLocalRandom.current().nextInt(5);
+                    long ttl = CacheConstants.CACHE_TTL_MIN + ThreadLocalRandom.current().nextInt(5);
                     redisTemplate.opsForValue().set(key, product, ttl, TimeUnit.MINUTES);
                     return product;
                 } finally {
@@ -108,7 +105,7 @@ public class ProductCacheService {
             }
 
             try {
-                Thread.sleep(RETRY_SLEEP_MS);
+                Thread.sleep(CacheConstants.RETRY_SLEEP_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return null;
@@ -189,7 +186,7 @@ public class ProductCacheService {
 
         productRepository.save(product);
 
-        long ttl = CACHE_TTL_MIN + ThreadLocalRandom.current().nextInt(5);
+        long ttl = CacheConstants.CACHE_TTL_MIN + ThreadLocalRandom.current().nextInt(5);
         redisTemplate.opsForValue().set(CACHE_PREFIX + product.getId(), product, ttl, TimeUnit.MINUTES);
 
         String logicalKey = LOGICAL_PREFIX + product.getId();
@@ -222,7 +219,7 @@ public class ProductCacheService {
     private String tryLock(String lockKey) {
         String token = UUID.randomUUID().toString();
         Boolean acquired = redisTemplate.opsForValue()
-                .setIfAbsent(lockKey, token, LOCK_TTL_SEC, TimeUnit.SECONDS);
+                .setIfAbsent(lockKey, token, CacheConstants.LOCK_TTL_SEC, TimeUnit.SECONDS);
         return Boolean.TRUE.equals(acquired) ? token : null;
     }
 

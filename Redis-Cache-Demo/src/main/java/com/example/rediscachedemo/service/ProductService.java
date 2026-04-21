@@ -7,12 +7,13 @@ import com.example.rediscachedemo.util.CacheConstants;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.hash.BloomFilter;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Objects;
@@ -20,36 +21,33 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductService {
 
-    private static final String CACHE_PREFIX   = "cache:product:";
-    private static final String LOCK_PREFIX    = "lock:product:";
-    private static final int    MAX_RETRIES    = 5;
-    private static final long   RETRY_SLEEP_MS = 50;
+    private static final String CACHE_PREFIX = "cache:product:";
+    private static final String LOCK_PREFIX  = "lock:product:";
 
     private final ProductRepository productRepository;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final BloomFilter<String> productBloomFilter;
 
-    private final ExecutorService rebuildExecutor = Executors.newFixedThreadPool(4);
+    @Value("${app.cache.rebuild-threads:4}")
+    private int rebuildThreads;
+
+    private ExecutorService rebuildExecutor;
+
+    @PostConstruct
+    private void init() {
+        rebuildExecutor = Executors.newFixedThreadPool(rebuildThreads);
+    }
 
     @PreDestroy
     void shutdownExecutor() {
-        rebuildExecutor.shutdown();
-        try {
-            if (!rebuildExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                rebuildExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            rebuildExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+        CacheConstants.gracefulShutdown(rebuildExecutor);
     }
 
     // -------------------------------------------------------------------------
@@ -71,11 +69,11 @@ public class ProductService {
 
         Product product = productRepository.findById(id);
         if (product == null) {
-            stringRedisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, Duration.ofMinutes(2));
+            stringRedisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, Duration.ofMinutes(CacheConstants.NULL_TTL_MIN));
             return null;
         }
 
-        int ttl = 300 + ThreadLocalRandom.current().nextInt(120);
+        long ttl = CacheConstants.CACHE_TTL_MIN * 60 + ThreadLocalRandom.current().nextInt(120);
         stringRedisTemplate.opsForValue().set(key, toJson(product), Duration.ofSeconds(ttl));
         return product;
     }
@@ -94,7 +92,7 @@ public class ProductService {
             return CacheConstants.NULL_VALUE.equals(cached) ? null : fromJson(cached, Product.class);
         }
 
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        for (int attempt = 0; attempt < CacheConstants.MAX_RETRIES; attempt++) {
             String token = tryLock(lockKey);
             if (token != null) {
                 try {
@@ -105,11 +103,11 @@ public class ProductService {
 
                     Product product = productRepository.findById(id);
                     if (product == null) {
-                        stringRedisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, Duration.ofMinutes(2));
+                        stringRedisTemplate.opsForValue().set(key, CacheConstants.NULL_VALUE, Duration.ofMinutes(CacheConstants.NULL_TTL_MIN));
                         return null;
                     }
 
-                    int ttl = 300 + ThreadLocalRandom.current().nextInt(120);
+                    long ttl = CacheConstants.CACHE_TTL_MIN * 60 + ThreadLocalRandom.current().nextInt(120);
                     stringRedisTemplate.opsForValue().set(key, toJson(product), Duration.ofSeconds(ttl));
                     return product;
                 } finally {
@@ -118,7 +116,7 @@ public class ProductService {
             }
 
             try {
-                Thread.sleep(RETRY_SLEEP_MS);
+                Thread.sleep(CacheConstants.RETRY_SLEEP_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return null;
@@ -197,7 +195,7 @@ public class ProductService {
     private String tryLock(String lockKey) {
         String token = UUID.randomUUID().toString();
         Boolean acquired = stringRedisTemplate.opsForValue()
-                .setIfAbsent(lockKey, token, Duration.ofSeconds(10));
+                .setIfAbsent(lockKey, token, Duration.ofSeconds(CacheConstants.LOCK_TTL_SEC));
         return Boolean.TRUE.equals(acquired) ? token : null;
     }
 
