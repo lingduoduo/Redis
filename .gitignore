@@ -1,8 +1,9 @@
 # Redis dump file
 dump.rdb
 
-# IntelliJ IDEA project settings
+# IDE project settings
 .idea/
+.vscode/
 
 # Python
 __pycache__/
