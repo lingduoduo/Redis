@@ -16,6 +16,7 @@ public class StreamProducerService {
     public static final String STREAM_KEY = "stream:order";
     public static final String FIELD_ORDER_ID = "orderId";
     public static final String FIELD_TIME = "time";
+    public static final int STREAM_MAX_LEN = 1000;
 
     private final StringRedisTemplate redisTemplate;
 
@@ -29,7 +30,13 @@ public class StreamProducerService {
             log.warn("Stream add returned null for orderId={}", orderId);
             return null;
         }
+        redisTemplate.opsForStream().trim(STREAM_KEY, STREAM_MAX_LEN, true);
         return recordId.getValue();
+    }
+
+    public long streamSize() {
+        Long size = redisTemplate.opsForStream().size(STREAM_KEY);
+        return size == null ? 0 : size;
     }
 
     Map<String, String> orderMessage(String orderId) {

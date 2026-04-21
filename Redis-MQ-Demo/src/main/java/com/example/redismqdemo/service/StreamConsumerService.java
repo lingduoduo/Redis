@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +72,9 @@ public class StreamConsumerService {
             return;
         }
 
+        List<String> processedIds = new ArrayList<>();
+        List<RecordId> toAck = new ArrayList<>();
+
         for (MapRecord<String, Object, Object> message : messages) {
             try {
                 Object orderId = message.getValue().get(StreamProducerService.FIELD_ORDER_ID);
@@ -79,12 +83,21 @@ public class StreamConsumerService {
                         message.getId().getValue(), orderId, time);
 
                 if (orderId != null) {
-                    recordProcessedOrder(orderId.toString());
+                    processedIds.add(orderId.toString());
                 }
-                redisTemplate.opsForStream().acknowledge(StreamProducerService.STREAM_KEY, GROUP, message.getId());
+                toAck.add(message.getId());
             } catch (Exception ex) {
                 log.error("Failed to process message {}", message.getId().getValue(), ex);
             }
+        }
+
+        if (!processedIds.isEmpty()) {
+            recordProcessedOrders(processedIds);
+        }
+        if (!toAck.isEmpty()) {
+            redisTemplate.opsForStream().acknowledge(
+                    StreamProducerService.STREAM_KEY, GROUP,
+                    toAck.toArray(RecordId[]::new));
         }
     }
 
@@ -107,11 +120,12 @@ public class StreamConsumerService {
         return orders == null ? Collections.emptyList() : orders;
     }
 
-    private void recordProcessedOrder(String orderId) {
+    private void recordProcessedOrders(List<String> orderIds) {
         redisTemplate.executePipelined((RedisCallback<Object>) conn -> {
             byte[] key = PROCESSED_ORDERS_KEY.getBytes(StandardCharsets.UTF_8);
-            byte[] value = orderId.getBytes(StandardCharsets.UTF_8);
-            conn.listCommands().lPush(key, value);
+            for (String orderId : orderIds) {
+                conn.listCommands().lPush(key, orderId.getBytes(StandardCharsets.UTF_8));
+            }
             conn.listCommands().lTrim(key, 0, 99);
             return null;
         });

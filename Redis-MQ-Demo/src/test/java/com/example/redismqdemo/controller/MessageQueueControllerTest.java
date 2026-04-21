@@ -10,9 +10,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StreamOperations;
-import org.springframework.data.redis.core.StringRedisTemplate;
-
 import java.util.List;
 import java.util.Map;
 
@@ -31,12 +28,6 @@ class MessageQueueControllerTest {
 
     @Mock
     private DelayQueueService delayQueueService;
-
-    @Mock
-    private StringRedisTemplate redisTemplate;
-
-    @Mock
-    private StreamOperations<String, Object, Object> streamOps;
 
     @InjectMocks
     private MessageQueueController messageQueueController;
@@ -75,8 +66,7 @@ class MessageQueueControllerTest {
 
     @Test
     void streamInfoReturnsGroupConsumerAndSize() {
-        when(redisTemplate.opsForStream()).thenReturn(streamOps);
-        when(streamOps.size(StreamProducerService.STREAM_KEY)).thenReturn(12L);
+        when(streamProducerService.streamSize()).thenReturn(12L);
 
         Map<String, Object> result = messageQueueController.streamInfo();
 

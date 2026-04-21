@@ -6,7 +6,6 @@ import com.example.redismqdemo.service.DelayQueueService;
 import com.example.redismqdemo.service.StreamConsumerService;
 import com.example.redismqdemo.service.StreamProducerService;
 import jakarta.validation.Valid;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -21,16 +20,13 @@ public class MessageQueueController {
     private final StreamProducerService streamProducerService;
     private final StreamConsumerService streamConsumerService;
     private final DelayQueueService delayQueueService;
-    private final StringRedisTemplate redisTemplate;
 
     public MessageQueueController(StreamProducerService streamProducerService,
                                   StreamConsumerService streamConsumerService,
-                                  DelayQueueService delayQueueService,
-                                  StringRedisTemplate redisTemplate) {
+                                  DelayQueueService delayQueueService) {
         this.streamProducerService = streamProducerService;
         this.streamConsumerService = streamConsumerService;
         this.delayQueueService = delayQueueService;
-        this.redisTemplate = redisTemplate;
     }
 
     @PostMapping("/stream/order")
@@ -75,9 +71,8 @@ public class MessageQueueController {
     @GetMapping("/stream/info")
     public Map<String, Object> streamInfo() {
         Map<String, Object> result = new LinkedHashMap<>();
-        Long size = redisTemplate.opsForStream().size(StreamProducerService.STREAM_KEY);
         result.put("stream", StreamProducerService.STREAM_KEY);
-        result.put("size", size == null ? 0 : size);
+        result.put("size", streamProducerService.streamSize());
         result.put("group", StreamConsumerService.GROUP);
         result.put("consumer", StreamConsumerService.CONSUMER);
         return result;

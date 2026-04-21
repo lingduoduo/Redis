@@ -1,12 +1,13 @@
 # Redis Examples
 
-This repo contains Redis notes and nine runnable example areas:
+This repo contains Redis notes and ten runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating Redis-backed `HttpSession` sharing across app instances.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
+- `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
@@ -46,6 +47,7 @@ Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rat
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
+Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Bloom-Filter/        Java Maven Bloom filter module
 Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
@@ -650,7 +652,7 @@ redis-cli scard "article:uv:1:$(date +%Y-%m-%d)"
 
 `Redis-MQ-Demo` is a Spring Boot 3 Maven demo for Redis-backed order messaging. It has two independent use cases:
 
-- **Order event stream** — writes order IDs to a Redis Stream, consumes them through a consumer group, acknowledges processed entries, and keeps a recent processed-order audit list.
+- **Order event stream** — writes order IDs to a Redis Stream (capped at 1 000 entries with `XTRIM MAXLEN ~`), consumes them through a consumer group, batches acknowledgements in a single `XACK` call, and keeps a recent processed-order audit list.
 - **Delayed order close** — schedules unpaid orders in a sorted set with the trigger timestamp as score, claims due entries with an atomic remove, and keeps a recent closed-order audit list.
 
 ### What it demonstrates
@@ -658,9 +660,10 @@ redis-cli scard "article:uv:1:$(date +%Y-%m-%d)"
 | Redis feature | Used for |
 |---|---|
 | `XADD` | Append order events to `stream:order` |
+| `XTRIM MAXLEN ~` | Cap `stream:order` at 1 000 entries after each write |
 | `XGROUP CREATE` | Bootstrap consumer group on first startup |
 | `XREADGROUP` | Reliable asynchronous order consumption |
-| `XACK` | Acknowledge successfully processed stream records |
+| `XACK` (batched) | Acknowledge a batch of processed stream records in one call |
 | `XPENDING` | Observe unacknowledged messages |
 | `XDEL` | Remove the transient bootstrap entry after group creation |
 | `ZADD` | Schedule delayed order-close jobs with score = trigger epoch ms |
@@ -861,6 +864,9 @@ redis-cli xinfo stream stream:order
 redis-cli xinfo groups stream:order
 redis-cli xrange stream:order - +
 
+# Confirm stream is capped — length should stay at or below 1000 under load
+redis-cli xlen stream:order
+
 # Processed audit list
 redis-cli lrange stream:order:processed 0 9
 
@@ -876,6 +882,90 @@ Confirm a claimed order is removed from the sorted set after closure:
 ```bash
 redis-cli zscore delay:order:close order-2001
 # (nil) — claimed and removed by the scanner
+```
+
+## Run Redis-BitMap-Demo
+
+`Redis-BitMap-Demo` is a Spring Boot 3 Maven demo for daily user sign-in tracking with Redis bitmaps. Each user/month maps to one bitmap key, where bit offset `0` is day 1, offset `1` is day 2, and so on.
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `SETBIT` | Mark a user as signed in for a date |
+| `GETBIT` | Check whether a user signed in on a date |
+| `BITCOUNT` | Count signed-in days for a month |
+| `BITFIELD` | Read month-to-date bits and calculate the current streak |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-BitMap-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-BitMap-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8080`. If another demo is using port `8080`, run this one on a different port:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8085"
+```
+
+### Daily sign-in use case
+
+Sign in for today:
+
+```bash
+curl -X POST http://localhost:8080/sign/42
+```
+
+Sign in for a specific date, useful for seeding demo data:
+
+```bash
+curl -X POST "http://localhost:8080/sign/42?date=2026-04-20"
+```
+
+Get signed-in days for that month:
+
+```bash
+curl "http://localhost:8080/sign/42/days?date=2026-04-20"
+```
+
+Get the current streak as of a date:
+
+```bash
+curl "http://localhost:8080/sign/42/streak?date=2026-04-20"
+```
+
+Get the full summary:
+
+```bash
+curl "http://localhost:8080/sign/42/summary?date=2026-04-20"
+```
+
+### Inspect Redis keys
+
+```bash
+redis-cli getbit sign:42:202604 19
+redis-cli bitcount sign:42:202604
+redis-cli bitfield sign:42:202604 get u20 0
 ```
 
 ## Run Redis-Test
@@ -1189,6 +1279,8 @@ cd Redis-Cache-Demo && mvn test
 cd ../Redis-RateLimit-Demo && mvn test
 cd ../Redis-HttpSession-Demo && mvn test
 cd ../Redis-RankService-Demo && mvn test
+cd ../Redis-MQ-Demo && mvn test
+cd ../Redis-BitMap-Demo && mvn test
 cd ../Redis-Lock-Demo && mvn test
 cd ../Redis-Bloom-Filter && mvn test
 cd ../Redis-Test && ./gradlew test
