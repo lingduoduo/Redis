@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ListOperations;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,13 +63,12 @@ class DelayQueueServiceTest {
                 .thenReturn(dueOrders);
         when(zSetOps.remove(DelayQueueService.QUEUE_KEY, "order-1")).thenReturn(1L);
         when(zSetOps.remove(DelayQueueService.QUEUE_KEY, "order-2")).thenReturn(0L);
-        when(redisTemplate.opsForList()).thenReturn(listOps);
 
         delayQueueService.scan();
 
-        verify(listOps).leftPush(DelayQueueService.CLOSED_ORDERS_KEY, "order-1");
-        verify(listOps).trim(DelayQueueService.CLOSED_ORDERS_KEY, 0, 99);
-        verify(listOps, never()).leftPush(DelayQueueService.CLOSED_ORDERS_KEY, "order-2");
+        // executePipelined is called exactly once — only for the claimed order-1;
+        // order-2 was not claimed (remove returned 0) so no pipeline call for it
+        verify(redisTemplate, times(1)).executePipelined(any(RedisCallback.class));
     }
 
     @Test

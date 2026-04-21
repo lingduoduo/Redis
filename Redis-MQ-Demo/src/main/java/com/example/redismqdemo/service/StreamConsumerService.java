@@ -4,7 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.RedisSystemException;
-import org.springframework.data.redis.connection.RedisCallback;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
