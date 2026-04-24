@@ -33,6 +33,8 @@ redis-server --port 6379
 redis-cli -p 6379 ping
 ```
 
+Note: `Redis-Autocomplete-Demo` requires RediSearch support, so plain Homebrew `redis-server` is not sufficient unless you also load the RediSearch module or use a Redis Stack build.
+
 If you run the Java sample exactly as configured, Redis must require password `123456`. Otherwise edit:
 
 ```text
