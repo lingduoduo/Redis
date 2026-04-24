@@ -35,17 +35,16 @@ class AutocompleteServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(redisTemplate.execute(any(RedisCallback.class)))
-                .thenAnswer(invocation -> {
-                    RedisCallback<?> callback = invocation.getArgument(0);
-                    return callback.doInRedis(redisConnection);
-                });
-
         autocompleteService = new AutocompleteService(redisTemplate);
     }
 
     @Test
     void suggestReturnsParsedSuggestionRows() {
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenAnswer(invocation -> {
+                    RedisCallback<?> callback = invocation.getArgument(0);
+                    return callback.doInRedis(redisConnection);
+                });
         when(redisConnection.execute(eq("FT.SUGGET"), any(byte[][].class)))
                 .thenReturn(List.of(
                         bytes("redis"), bytes("880"),
@@ -77,6 +76,11 @@ class AutocompleteServiceTest {
 
     @Test
     void dictionaryInfoReadsDictionaryLength() {
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenAnswer(invocation -> {
+                    RedisCallback<?> callback = invocation.getArgument(0);
+                    return callback.doInRedis(redisConnection);
+                });
         when(redisConnection.execute(eq("FT.SUGLEN"), any(byte[][].class))).thenReturn(31L);
 
         DictionaryInfoResponse response = autocompleteService.dictionaryInfo("keywords_ac");
@@ -87,6 +91,11 @@ class AutocompleteServiceTest {
 
     @Test
     void clearDictionaryDeletesKeyAndReturnsPreviousSize() {
+        when(redisTemplate.execute(any(RedisCallback.class)))
+                .thenAnswer(invocation -> {
+                    RedisCallback<?> callback = invocation.getArgument(0);
+                    return callback.doInRedis(redisConnection);
+                });
         when(redisConnection.execute(eq("FT.SUGLEN"), any(byte[][].class))).thenReturn(31L);
 
         DictionaryInfoResponse response = autocompleteService.clearDictionary("keywords_ac");
@@ -111,7 +120,7 @@ class AutocompleteServiceTest {
         assertThat(response.inserted()).isEqualTo(31);
         assertThat(response.skipped()).isZero();
         assertThat(response.clearedBeforeImport()).isTrue();
-        assertThat(response.size()).isEqualTo(31L);
+        assertThat(response.dictionarySize()).isEqualTo(31L);
     }
 
     private static byte[] bytes(String value) {

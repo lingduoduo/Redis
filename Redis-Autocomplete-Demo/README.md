@@ -16,13 +16,30 @@
 
 - Java 17+
 - Maven 3.6+
-- Redis Stack running on `localhost:6379`
+- Redis with RediSearch support running on `localhost:6379`
+
+Important:
+
+- Plain `redis-server --port 6379` from the Homebrew `redis` formula is not enough for this demo
+- This demo requires RediSearch commands: `FT.SUGADD`, `FT.SUGGET`, and `FT.SUGLEN`
+- If `redis-cli COMMAND INFO FT.SUGADD` returns `(nil)`, your Redis instance does not support this demo yet
 
 Start Redis Stack:
 
 ```bash
 docker run --rm -p 6379:6379 redis/redis-stack:latest
 ```
+
+If you prefer a local non-Docker setup, you still need a RediSearch-enabled server such as `redis-stack-server` or a Redis server started with the RediSearch module loaded.
+
+Quick verification:
+
+```bash
+redis-cli -p 6379 COMMAND INFO FT.SUGADD
+redis-cli -p 6379 COMMAND INFO FT.SUGGET
+```
+
+Both commands should return command metadata. If they return `(nil)`, the demo endpoints will fail with `500` because the Redis server does not recognize `FT.*` commands.
 
 ## Configuration
 
@@ -35,6 +52,8 @@ spring:
       host: localhost
       port: 6379
 ```
+
+If you run a RediSearch-enabled Redis instance on another port such as `6380`, update `port` accordingly.
 
 ## Build and run
 
@@ -51,6 +70,14 @@ java -jar target/redis-autocomplete-demo-0.0.1-SNAPSHOT.jar
 ```
 
 The server starts on `http://localhost:8080`.
+
+If startup succeeds but requests return `500`, check the Redis command support again:
+
+```bash
+redis-cli -p 6379 COMMAND INFO FT.SUGADD
+```
+
+That is the fastest way to tell whether the issue is missing RediSearch support versus a Spring application problem.
 
 ## Sample dataset
 
