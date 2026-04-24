@@ -1,0 +1,31 @@
+strawberry 950
+strawberry jam 870
+strawberry cake 700
+strawberry smoothie 640
+strawberry milk 500
+strawberries 460
+jam 420
+blueberry jam 390
+raspberry jam 340
+blackberry jam 250
+java 900
+javascript 850
+java spring boot 640
+java redis autocomplete 560
+python 920
+python redis 740
+python autocomplete 630
+pytorch 600
+pytorch recommender system 450
+redis 880
+redis stack 760
+redis search 720
+redis autocomplete 710
+redis suggestion 650
+recommendation system 620
+recommender model 570
+retrieval augmented generation 520
+rag pipeline 500
+semantic search 690
+hybrid search 610
+search ranking 530

@@ -1,6 +1,6 @@
 # Redis Examples
 
-This repo contains Redis notes and eleven runnable example areas:
+This repo contains Redis notes and twelve runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
@@ -10,6 +10,7 @@ This repo contains Redis notes and eleven runnable example areas:
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
 - `Redis-Geo-Demo`: Spring Boot 3 REST service demonstrating Redis GEO nearby-shop search with coordinates and distances.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
+- `Redis-Autocomplete-Demo`: Spring Boot 3 REST service demonstrating Redis Stack RediSearch suggestion dictionaries, ranked prefix suggestions, and fuzzy autocomplete.
 - `Redis-Bloom-Filter`: Java/Maven Bloom filter implementation backed by Redis Cluster bitmaps.
 - `Redis-Test`: Java/Gradle examples for Jedis direct connections, connection pools, Sentinel, and a Spring `RedisTemplate` configuration.
 - `Redis-Python`: Python examples for Redis direct/pool/Sentinel connections, Pub/Sub, RediSearch suggestions, and a small Streamlit demo.
@@ -51,6 +52,7 @@ Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed q
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
 Redis-Geo-Demo/            Spring Boot 3 Maven: Redis GEO nearby-shop search
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
+Redis-Autocomplete-Demo/   Spring Boot 3 Maven: Redis Stack RediSearch autocomplete suggestions
 Redis-Bloom-Filter/        Java Maven Bloom filter module
 Redis-Test/                Java Gradle sample: Jedis, Sentinel, RedisTemplate config
 Redis-Python/              Python Redis scripts and Streamlit demo
