@@ -6,6 +6,14 @@ import com.example.redisautocompletedemo.model.DictionaryInfoResponse;
 import com.example.redisautocompletedemo.model.ImportResponse;
 import com.example.redisautocompletedemo.model.SuggestResponse;
 import com.example.redisautocompletedemo.model.SuggestionItem;
+import io.lettuce.core.api.async.RedisAsyncCommands;
+import io.lettuce.core.codec.ByteArrayCodec;
+import io.lettuce.core.output.ArrayOutput;
+import io.lettuce.core.output.CommandOutput;
+import io.lettuce.core.output.IntegerOutput;
+import io.lettuce.core.protocol.CommandArgs;
+import io.lettuce.core.protocol.ProtocolKeyword;
+import io.lettuce.core.api.sync.RedisCommands;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -19,6 +27,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class AutocompleteService {
@@ -30,6 +39,9 @@ public class AutocompleteService {
     private static final byte[] FUZZY = bytes("FUZZY");
     private static final byte[] MAX = bytes("MAX");
     private static final byte[] INCR = bytes("INCR");
+    private static final ProtocolKeyword FT_SUGADD = keyword("FT.SUGADD");
+    private static final ProtocolKeyword FT_SUGGET = keyword("FT.SUGGET");
+    private static final ProtocolKeyword FT_SUGLEN = keyword("FT.SUGLEN");
 
     private final StringRedisTemplate redisTemplate;
 
@@ -64,24 +76,9 @@ public class AutocompleteService {
             throw new IllegalStateException("Failed to read bundled sample dataset", e);
         }
 
-        List<Object> results;
-        try {
-            results = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-                for (KeywordEntry entry : entries) {
-                    connection.execute("FT.SUGADD", suggestionAddArgs(dictionaryKey, entry.term(), entry.score(), incremental));
-                }
-                connection.execute("FT.SUGLEN", bytes(dictionaryKey));
-                return null;
-            });
-        } catch (DataAccessException ex) {
-            throw new IllegalStateException(
-                    "Redis Stack autocomplete command failed. Make sure Redis Stack is running and RediSearch is available.",
-                    ex
-            );
+        for (KeywordEntry entry : entries) {
+            sugadd(dictionaryKey, entry.term(), entry.score(), incremental);
         }
-
-        long finalSize = (!results.isEmpty() && results.get(results.size() - 1) instanceof Number n)
-                ? n.longValue() : 0L;
 
         return new ImportResponse(
                 "sample keywords imported",
@@ -91,13 +88,13 @@ public class AutocompleteService {
                 skipped,
                 incremental,
                 clearBeforeImport,
-                finalSize
+                dictionarySize(dictionaryKey)
         );
     }
 
     public AddSuggestionResponse addSuggestion(String key, String term, double score, boolean incremental) {
         String dictionaryKey = normalizeKey(key);
-        execute(connection -> connection.execute("FT.SUGADD", suggestionAddArgs(dictionaryKey, term, score, incremental)));
+        sugadd(dictionaryKey, term, score, incremental);
         return new AddSuggestionResponse(
                 "suggestion added",
                 dictionaryKey,
@@ -116,30 +113,12 @@ public class AutocompleteService {
 
     public CompareSuggestResponse compare(String key, String prefix, int maxResults) {
         String dictionaryKey = normalizeKey(key);
-        byte[] keyBytes = bytes(dictionaryKey);
-        byte[] prefixBytes = bytes(prefix);
-        byte[] maxBytes = bytes(Integer.toString(maxResults));
-
-        List<Object> results;
-        try {
-            results = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-                connection.execute("FT.SUGGET", keyBytes, prefixBytes, MAX, maxBytes, WITH_SCORES);
-                connection.execute("FT.SUGGET", keyBytes, prefixBytes, FUZZY, MAX, maxBytes, WITH_SCORES);
-                return null;
-            });
-        } catch (DataAccessException ex) {
-            throw new IllegalStateException(
-                    "Redis Stack autocomplete command failed. Make sure Redis Stack is running and RediSearch is available.",
-                    ex
-            );
-        }
-
         return new CompareSuggestResponse(
                 dictionaryKey,
                 prefix,
                 maxResults,
-                parseSuggestions(results.get(0)),
-                parseSuggestions(results.get(1))
+                fetchSuggestions(dictionaryKey, prefix, maxResults, false),
+                fetchSuggestions(dictionaryKey, prefix, maxResults, true)
         );
     }
 
@@ -156,28 +135,22 @@ public class AutocompleteService {
     }
 
     public long dictionarySize(String key) {
-        Object raw = execute(connection -> connection.execute("FT.SUGLEN", bytes(normalizeKey(key))));
-        if (raw == null) {
-            return 0L;
-        }
-        if (raw instanceof Number number) {
-            return number.longValue();
-        }
-        throw new IllegalStateException("Unexpected FT.SUGLEN response: " + raw.getClass().getName());
+        Long size = dispatch(FT_SUGLEN, new IntegerOutput<>(ByteArrayCodec.INSTANCE), bytes(normalizeKey(key)));
+        return size == null ? 0L : size;
     }
 
     private List<SuggestionItem> fetchSuggestions(String key, String prefix, int maxResults, boolean fuzzy) {
-        List<byte[]> args = new ArrayList<>();
-        args.add(bytes(normalizeKey(key)));
-        args.add(bytes(prefix));
+        List<byte[]> params = new ArrayList<>();
+        params.add(bytes(normalizeKey(key)));
+        params.add(bytes(prefix));
         if (fuzzy) {
-            args.add(FUZZY);
+            params.add(FUZZY);
         }
-        args.add(MAX);
-        args.add(bytes(Integer.toString(maxResults)));
-        args.add(WITH_SCORES);
+        params.add(MAX);
+        params.add(bytes(Integer.toString(maxResults)));
+        params.add(WITH_SCORES);
 
-        Object raw = execute(connection -> connection.execute("FT.SUGGET", args.toArray(byte[][]::new)));
+        Object raw = dispatch(FT_SUGGET, new ArrayOutput<>(ByteArrayCodec.INSTANCE), params.toArray(byte[][]::new));
         return parseSuggestions(raw);
     }
 
@@ -203,6 +176,10 @@ public class AutocompleteService {
             args.add(INCR);
         }
         return args.toArray(byte[][]::new);
+    }
+
+    private void sugadd(String key, String term, double score, boolean incremental) {
+        dispatch(FT_SUGADD, new IntegerOutput<>(ByteArrayCodec.INSTANCE), suggestionAddArgs(key, term, score, incremental));
     }
 
     private KeywordEntry parseKeywordLine(String line) {
@@ -250,8 +227,57 @@ public class AutocompleteService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private <T> T dispatch(ProtocolKeyword keyword, CommandOutput<byte[], byte[], T> output, byte[]... params) {
+        return execute((RedisCallback<T>) connection -> {
+            Object nativeConnection = connection.getNativeConnection();
+            RedisCommands<byte[], byte[]> redisCommands = resolveRedisCommands(nativeConnection);
+
+            CommandArgs<byte[], byte[]> commandArgs = new CommandArgs<>(ByteArrayCodec.INSTANCE);
+            for (byte[] param : params) {
+                commandArgs.add(param);
+            }
+
+            return redisCommands.dispatch(keyword, output, commandArgs);
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private RedisCommands<byte[], byte[]> resolveRedisCommands(Object nativeConnection) {
+        if (nativeConnection instanceof RedisCommands<?, ?> syncCommands) {
+            return (RedisCommands<byte[], byte[]>) syncCommands;
+        }
+        if (nativeConnection instanceof RedisAsyncCommands<?, ?> asyncCommands) {
+            return (RedisCommands<byte[], byte[]>) asyncCommands.getStatefulConnection().sync();
+        }
+        throw new IllegalStateException(
+                "Unsupported Redis connection type for RediSearch commands: " +
+                        (nativeConnection == null ? "null" : nativeConnection.getClass().getName())
+        );
+    }
+
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static ProtocolKeyword keyword(String command) {
+        byte[] encoded = bytes(command);
+        return new ProtocolKeyword() {
+            @Override
+            public String name() {
+                return command;
+            }
+
+            @Override
+            public byte[] getBytes() {
+                return encoded;
+            }
+
+            @Override
+            public String toString() {
+                return command;
+            }
+        };
     }
 
     private String toUtf8(Object value) {

@@ -4,6 +4,7 @@ import com.example.redisautocompletedemo.model.CompareSuggestResponse;
 import com.example.redisautocompletedemo.model.DictionaryInfoResponse;
 import com.example.redisautocompletedemo.model.ImportResponse;
 import com.example.redisautocompletedemo.model.SuggestResponse;
+import io.lettuce.core.api.sync.RedisCommands;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,21 +32,26 @@ class AutocompleteServiceTest {
     @Mock
     private RedisConnection redisConnection;
 
+    @Mock
+    @SuppressWarnings("unchecked")
+    private RedisCommands<byte[], byte[]> redisCommands;
+
     private AutocompleteService autocompleteService;
 
     @BeforeEach
     void setUp() {
         autocompleteService = new AutocompleteService(redisTemplate);
-    }
-
-    @Test
-    void suggestReturnsParsedSuggestionRows() {
         when(redisTemplate.execute(any(RedisCallback.class)))
                 .thenAnswer(invocation -> {
                     RedisCallback<?> callback = invocation.getArgument(0);
                     return callback.doInRedis(redisConnection);
                 });
-        when(redisConnection.execute(eq("FT.SUGGET"), any(byte[][].class)))
+        when(redisConnection.getNativeConnection()).thenReturn(redisCommands);
+    }
+
+    @Test
+    void suggestReturnsParsedSuggestionRows() {
+        when(redisCommands.dispatch(any(), any(), any()))
                 .thenReturn(List.of(
                         bytes("redis"), bytes("880"),
                         bytes("redis stack"), bytes("760")
@@ -62,10 +68,11 @@ class AutocompleteServiceTest {
 
     @Test
     void compareReturnsExactAndFuzzyVariants() {
-        when(redisTemplate.executePipelined(any(RedisCallback.class)))
+        when(redisCommands.dispatch(any(), any(), any()))
+                .thenReturn(List.of(bytes("python"), bytes("920")))
                 .thenReturn(List.of(
-                        List.of(bytes("python"), bytes("920")),
-                        List.of(bytes("python"), bytes("920"), bytes("pytorch"), bytes("600"))
+                        bytes("python"), bytes("920"),
+                        bytes("pytorch"), bytes("600")
                 ));
 
         CompareSuggestResponse response = autocompleteService.compare("keywords_ac", "pythn", 5);
@@ -76,12 +83,7 @@ class AutocompleteServiceTest {
 
     @Test
     void dictionaryInfoReadsDictionaryLength() {
-        when(redisTemplate.execute(any(RedisCallback.class)))
-                .thenAnswer(invocation -> {
-                    RedisCallback<?> callback = invocation.getArgument(0);
-                    return callback.doInRedis(redisConnection);
-                });
-        when(redisConnection.execute(eq("FT.SUGLEN"), any(byte[][].class))).thenReturn(31L);
+        when(redisCommands.dispatch(any(), any(), any())).thenReturn(31L);
 
         DictionaryInfoResponse response = autocompleteService.dictionaryInfo("keywords_ac");
 
@@ -91,12 +93,7 @@ class AutocompleteServiceTest {
 
     @Test
     void clearDictionaryDeletesKeyAndReturnsPreviousSize() {
-        when(redisTemplate.execute(any(RedisCallback.class)))
-                .thenAnswer(invocation -> {
-                    RedisCallback<?> callback = invocation.getArgument(0);
-                    return callback.doInRedis(redisConnection);
-                });
-        when(redisConnection.execute(eq("FT.SUGLEN"), any(byte[][].class))).thenReturn(31L);
+        when(redisCommands.dispatch(any(), any(), any())).thenReturn(31L);
 
         DictionaryInfoResponse response = autocompleteService.clearDictionary("keywords_ac");
 
@@ -106,17 +103,43 @@ class AutocompleteServiceTest {
 
     @Test
     void importSampleReportsInsertedRows() {
-        when(redisTemplate.executePipelined(any(RedisCallback.class)))
-                .thenAnswer(invocation -> {
-                    RedisCallback<?> callback = invocation.getArgument(0);
-                    callback.doInRedis(redisConnection);
-                    return List.of(31L); // last element is FT.SUGLEN result from the pipeline
-                });
+        when(redisCommands.dispatch(any(), any(), any()))
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(1L)
+                .thenReturn(31L);
 
         ImportResponse response = autocompleteService.importSample("keywords_ac", true, false);
 
         verify(redisTemplate).delete("keywords_ac");
-        verify(redisTemplate).executePipelined(any(RedisCallback.class));
         assertThat(response.inserted()).isEqualTo(31);
         assertThat(response.skipped()).isZero();
         assertThat(response.clearedBeforeImport()).isTrue();

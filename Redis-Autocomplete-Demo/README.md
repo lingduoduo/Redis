@@ -27,6 +27,7 @@ Important:
 Start Redis Stack:
 
 ```bash
+colima start
 docker run --rm -p 6379:6379 redis/redis-stack:latest
 ```
 
