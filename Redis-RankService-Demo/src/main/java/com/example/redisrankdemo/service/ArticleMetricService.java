@@ -1,6 +1,8 @@
 package com.example.redisrankdemo.service;
 
 import com.example.redisrankdemo.model.ArticleStats;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -9,6 +11,8 @@ import java.time.LocalDate;
 
 @Service
 public class ArticleMetricService {
+
+    private static final Logger log = LoggerFactory.getLogger(ArticleMetricService.class);
 
     private final StringRedisTemplate redisTemplate;
     private final RankService rankService;
@@ -90,7 +94,13 @@ public class ArticleMetricService {
 
     private long getLong(String key) {
         String value = redisTemplate.opsForValue().get(key);
-        return value == null ? 0L : Long.parseLong(value);
+        if (value == null) return 0L;
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            log.warn("Non-numeric value for key {}: {}", key, value);
+            return 0L;
+        }
     }
 
     private String articleMemberId(Long articleId) {
