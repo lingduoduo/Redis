@@ -10,19 +10,19 @@ spring:
       database: 0
       
       # Connection timeout and command execution timeout
-      timeout: 3000ms
+      timeout: 3s
       
       # Lettuce connection pool optimization
       lettuce:
         pool:
-          # Maximum active connections in pool (tuned for flash sales)
+          # intentionally higher than other modules; supports flash-sale concurrency
           max-active: 32
           # Maximum idle connections (prevent connection leaks)
           max-idle: 16
           # Minimum idle connections to maintain (warm pool)
           min-idle: 4
           # Maximum wait time when pool is exhausted
-          max-wait: 2000ms
+          max-wait: 2s
           # Enable connection validation
           test-on-borrow: true
           test-on-return: false
@@ -41,7 +41,7 @@ server:
       max: 100
       min-spare: 10
     # Keep-alive timeout for persistent connections
-    keep-alive-timeout: 60000ms
+    keep-alive-timeout: 60s
 
 # Logging configuration
 logging:

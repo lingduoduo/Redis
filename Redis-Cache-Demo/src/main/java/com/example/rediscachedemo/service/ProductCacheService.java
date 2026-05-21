@@ -76,7 +76,7 @@ public class ProductCacheService {
         String key = CACHE_PREFIX + id;
         Object raw = redisTemplate.opsForValue().get(key);
         if (raw != null) {
-            return CacheConstants.NULL_VALUE.equals(raw) ? null : (Product) raw;
+            return safeCast(key, raw);
         }
 
         String lockKey = LOCK_PREFIX + id;
@@ -87,7 +87,7 @@ public class ProductCacheService {
                     // Double-check: a concurrent thread may have populated the cache.
                     raw = redisTemplate.opsForValue().get(key);
                     if (raw != null) {
-                        return CacheConstants.NULL_VALUE.equals(raw) ? null : (Product) raw;
+                        return safeCast(key, raw);
                     }
 
                     Product product = productRepository.findById(id);
@@ -113,7 +113,7 @@ public class ProductCacheService {
 
             raw = redisTemplate.opsForValue().get(key);
             if (raw != null) {
-                return CacheConstants.NULL_VALUE.equals(raw) ? null : (Product) raw;
+                return safeCast(key, raw);
             }
         }
 
@@ -208,6 +208,16 @@ public class ProductCacheService {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private Product safeCast(String key, Object raw) {
+        if (CacheConstants.NULL_VALUE.equals(raw)) return null;
+        if (!(raw instanceof Product product)) {
+            log.warn("Unexpected type in cache for key {}: {}", key, raw.getClass());
+            redisTemplate.delete(key);
+            return null;
+        }
+        return product;
+    }
 
     private void setLogicalExpire(String key, Product product, Duration logicalTtl) {
         RedisData<Product> redisData = new RedisData<>(

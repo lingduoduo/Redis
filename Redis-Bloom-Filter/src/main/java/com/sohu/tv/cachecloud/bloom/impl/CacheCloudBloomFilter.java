@@ -18,7 +18,7 @@ import com.sohu.tv.cachecloud.bloom.builder.BloomFilterBuilder;
 import com.sohu.tv.cachecloud.bloom.hash.HashFunction;
 
 import redis.clients.jedis.JedisCluster;
-import redis.clients.util.JedisClusterCRC16;
+import redis.clients.jedis.util.JedisClusterCRC16;
 
 /**
  * CacheCloud bloom filter.

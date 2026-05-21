@@ -7,13 +7,13 @@ spring:
       port: 6379
       password:             # set if your Redis requires auth
       database: 0
-      timeout: 3000ms
+      timeout: 3s
       lettuce:
         pool:
-          max-active: 32
-          max-idle: 16
-          min-idle: 4
-          max-wait: 2000ms
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
 
 server:
   port: 8080

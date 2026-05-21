@@ -5,13 +5,13 @@ spring:
     redis:
       host: localhost
       port: 6379
-      timeout: 3000ms
+      timeout: 3s
       lettuce:
         pool:
           max-active: 16
           max-idle: 8
           min-idle: 2
-          max-wait: 2000ms
+          max-wait: 2s
 
 server:
   port: 8080
