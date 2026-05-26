@@ -1,12 +1,14 @@
 # Redis Examples
 
-This repo contains Redis notes and fourteen runnable example areas:
+This repo contains Redis notes and sixteen runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating data sharing across distributed app instances with Redis-backed `HttpSession`.
 - `Redis-GlobalId-Demo`: Spring Boot 3 REST service demonstrating Redis `INCRBY` segment allocation for global IDs in sharded database/table scenarios.
 - `Redis-Hash-Demo`: Spring Boot 3 REST service demonstrating Redis Hash shopping carts with user ID keys, product ID fields, and quantity values.
+- `Redis-List-Demo`: Spring Boot 3 REST service demonstrating Redis List user message timelines with ordered insertion and pagination.
+- `Redis-TimeLine-Demo`: Spring Boot 3 REST service demonstrating Redis Sorted Set timelines with epoch-millisecond scores, cursor-based pagination, and time-range queries.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, online users, retention, and multi-day activity stats.
@@ -23,7 +25,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Redis-Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-GlobalId-Demo`, `Redis-Hash-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-GlobalId-Demo`, `Redis-Hash-Demo`, `Redis-List-Demo`, `Redis-TimeLine-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -53,6 +55,8 @@ Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rat
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: distributed data sharing via Redis-backed HttpSession
 Redis-GlobalId-Demo/       Spring Boot 3 Maven: Redis INCRBY global ID segment allocation
 Redis-Hash-Demo/           Spring Boot 3 Maven: Redis Hash shopping cart item quantities
+Redis-List-Demo/           Spring Boot 3 Maven: Redis List user message timelines
+Redis-TimeLine-Demo/       Spring Boot 3 Maven: Redis Sorted Set timelines with cursor pagination
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap sign-in, online users, retention
@@ -785,6 +789,196 @@ redis-cli hgetall cart:u42
 redis-cli hlen cart:u42
 redis-cli hdel cart:u42 p1001
 ```
+
+## Run Redis-List-Demo
+
+`Redis-List-Demo` is a Spring Boot 3 Maven demo for user message timelines with Redis Lists. Redis List is implemented as a linked list internally, so inserting at the head with `LPUSH` is fast and preserves newest-first timeline order.
+
+Data model:
+
+```text
+key   = timeline:{userId}
+value = JSON timeline message
+```
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `LPUSH` | Insert a new message at the head of a user's timeline |
+| `LRANGE` | Page timeline messages in insertion order |
+| `LTRIM` | Keep only the newest N messages |
+| `LLEN` | Count messages in the timeline |
+| `DEL` | Clear a timeline |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-List-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-List-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8087`.
+
+### Timeline flow
+
+Publish a message to one user's timeline:
+
+```bash
+curl -X POST "http://localhost:8087/timelines/u42/messages?maxLength=100" \
+  -H "Content-Type: application/json" \
+  -d '{"authorId":"alice","content":"hello timeline"}'
+```
+
+Fan out one message to multiple users:
+
+```bash
+curl -X POST "http://localhost:8087/timelines/fanout?maxLength=100" \
+  -H "Content-Type: application/json" \
+  -d '{"authorId":"alice","content":"new post","receiverUserIds":["u42","u43","u44"]}'
+```
+
+Read the newest 20 messages:
+
+```bash
+curl "http://localhost:8087/timelines/u42?start=0&end=19"
+```
+
+Check timeline length:
+
+```bash
+curl http://localhost:8087/timelines/u42/size
+```
+
+Inspect Redis directly:
+
+```bash
+redis-cli lrange timeline:u42 0 19
+redis-cli llen timeline:u42
+redis-cli ltrim timeline:u42 0 99
+```
+
+This pattern is a good fit when each user's timeline can be stored directly in Redis and ordered by insertion time. For global ordering by arbitrary timestamps or score-based pagination, use a sorted set instead.
+
+## Run Redis-TimeLine-Demo
+
+`Redis-TimeLine-Demo` is a Spring Boot 3 Maven demo for user message timelines backed by a Redis Sorted Set. The score is the message's epoch-millisecond timestamp, enabling cursor-based pagination and time-range queries that are not possible with a plain List.
+
+Data model:
+
+```text
+key    = timeline:{userId}
+score  = epoch-millis of createdAt
+member = JSON timeline message (UUID messageId guarantees uniqueness)
+```
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `ZADD` | Publish a message with its timestamp as the score |
+| `ZREVRANGEBYSCORE … LIMIT` | Cursor-based newest-first page |
+| `ZREVRANGEBYSCORE` (bounded) | Time-range query by epoch-millis window |
+| `ZREMRANGEBYRANK 0 -(N+1)` | Trim to keep only the newest N messages |
+| `ZCARD` | Count messages in the timeline |
+| `DEL` | Clear a timeline |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-TimeLine-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-TimeLine-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8087`.
+
+### Timeline flow
+
+Publish a message to one user's timeline:
+
+```bash
+curl -X POST "http://localhost:8087/timelines/u42/messages?maxLength=100" \
+  -H "Content-Type: application/json" \
+  -d '{"authorId":"alice","content":"hello sorted-set timeline"}'
+```
+
+Fan out one message to multiple users (write-on-fanout):
+
+```bash
+curl -X POST "http://localhost:8087/timelines/fanout?maxLength=100" \
+  -H "Content-Type: application/json" \
+  -d '{"authorId":"alice","content":"new post","receiverUserIds":["u42","u43","u44"]}'
+```
+
+Read the first page (newest 20 messages, no cursor = start from top):
+
+```bash
+curl "http://localhost:8087/timelines/u42?pageSize=20"
+```
+
+Read the next page using the `nextCursor` from the previous response (`null` means end of timeline):
+
+```bash
+curl "http://localhost:8087/timelines/u42?cursor=<nextCursor>&pageSize=20"
+```
+
+Query messages within a time window (epoch-milliseconds):
+
+```bash
+curl "http://localhost:8087/timelines/u42/range?fromMs=1716825600000&toMs=1716912000000"
+```
+
+Check timeline size:
+
+```bash
+curl http://localhost:8087/timelines/u42/size
+```
+
+Inspect Redis directly:
+
+```bash
+redis-cli zcard timeline:u42
+redis-cli zrevrangebyscore timeline:u42 +inf -inf LIMIT 0 20
+redis-cli zrevrangebyscore timeline:u42 1716912000000 1716825600000
+```
+
+Sorted Sets give you score-ordered membership with O(log N) insertion and O(log N + M) range queries, making them the right choice when offset-based List pagination becomes unwieldy or when you need timestamp cursor semantics.
 
 ## Run Redis-RankService-Demo
 
