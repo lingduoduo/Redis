@@ -25,15 +25,15 @@ public class ArticleMetricService {
     private static final Duration UV_EXPIRE = Duration.ofDays(2);
 
     public long incrView(Long articleId) {
-        return valueOpsIncrement("article:view:" + articleId);
+        return incrementCounter(articleId, ArticleCounterType.VIEW);
     }
 
     public long incrLike(Long articleId) {
-        return valueOpsIncrement("article:like:" + articleId);
+        return incrementCounter(articleId, ArticleCounterType.LIKE);
     }
 
     public long incrPv(Long articleId) {
-        return valueOpsIncrement("article:pv:" + articleId);
+        return incrementCounter(articleId, ArticleCounterType.PV);
     }
 
     public long trackUv(Long articleId, String visitorId) {
@@ -70,15 +70,15 @@ public class ArticleMetricService {
     }
 
     public long getViews(Long articleId) {
-        return getLong("article:view:" + articleId);
+        return getLong(ArticleCounterType.VIEW.counterKey(articleId));
     }
 
     public long getLikes(Long articleId) {
-        return getLong("article:like:" + articleId);
+        return getLong(ArticleCounterType.LIKE.counterKey(articleId));
     }
 
     public long getPv(Long articleId) {
-        return getLong("article:pv:" + articleId);
+        return getLong(ArticleCounterType.PV.counterKey(articleId));
     }
 
     public long getUv(Long articleId) {
@@ -90,6 +90,12 @@ public class ArticleMetricService {
     private long valueOpsIncrement(String key) {
         Long value = redisTemplate.opsForValue().increment(key);
         return value == null ? 0L : value;
+    }
+
+    private long incrementCounter(Long articleId, ArticleCounterType counterType) {
+        long value = valueOpsIncrement(counterType.counterKey(articleId));
+        redisTemplate.opsForSet().add(counterType.dirtyKey(), String.valueOf(articleId));
+        return value;
     }
 
     private long getLong(String key) {

@@ -650,6 +650,7 @@ redis-cli incrby global:id:user 1000
 `Redis-RankService-Demo` is a Spring Boot 3 Maven demo for Redis sorted-set leaderboards. It has two independent use cases:
 
 - **Article metrics** — records article views and likes, scores each article in a daily sorted set, and exposes a top-N leaderboard.
+- **Delayed counter sync** — writes view/like/PV counters to Redis with `INCR`, marks dirty article IDs, and periodically syncs snapshots to a simulated database repository.
 - **Generic leaderboard** — a parameterised API where any leaderboard name maps to its own Redis key. Supports set score, increment, top-N, rank lookup, around-me neighbourhood, remove, and count.
 
 ### What it demonstrates
@@ -665,6 +666,7 @@ redis-cli incrby global:id:user 1000
 | `ZREM` | Remove a member from the leaderboard |
 | `ZCARD` | Total member count |
 | `INCR` | View and like counters |
+| `SADD` + `SPOP` | Dirty article tracking for delayed counter sync |
 | `SADD` + `EXPIRE` | Daily unique-visitor (UV) tracking per article |
 
 ### Prerequisites
@@ -717,6 +719,28 @@ Get article stats (views, likes, PV, UV, and today's leaderboard rank):
 ```bash
 curl http://localhost:8080/articles/1/stats
 ```
+
+Check the delayed database snapshot. It may lag behind Redis until the scheduled sync runs:
+
+```bash
+curl http://localhost:8080/articles/1/db-counters
+```
+
+Trigger a manual sync instead of waiting for the scheduler:
+
+```bash
+curl -X POST http://localhost:8080/articles/counters/sync
+curl http://localhost:8080/articles/1/db-counters
+```
+
+The scheduled sync runs every 5 seconds by default. Each counter write does:
+
+```text
+INCR article:view:{articleId}
+SADD article:dirty:view {articleId}
+```
+
+The sync task drains dirty sets with `SPOP`, reads the latest Redis values, and writes a snapshot to the simulated repository. This pattern is useful when counters can tolerate a small delay before reaching the database.
 
 Get today's top-10 articles:
 
