@@ -15,6 +15,29 @@ Some of the most fundamental data structures supported by Redis:
 - Geospatial Indexes
 - Time Series
 
+### Redis for Bitmap Statistics
+
+Redis bitmaps are compact counters for boolean user facts. If user IDs are numeric, you can use the user ID as the bit offset:
+
+```
+SETBIT activity:online:20260520 42 1
+GETBIT activity:online:20260520 42
+BITCOUNT activity:online:20260520
+```
+
+This is useful for online-user statistics, daily active users, sign-in calendars, and retention analysis.
+
+For multi-day activity, store one bitmap per day and use bit operations:
+
+```
+BITOP AND activity:result:7day:all activity:online:20260520 ... activity:online:20260526
+BITCOUNT activity:result:7day:all
+```
+
+The `AND` result counts users who were online every day in the range. `OR` counts users who were online on at least one day. Retention from day A to day B is also an `AND` between those two daily bitmaps.
+
+Tradeoffs: bitmap offsets are efficient when user IDs are reasonably dense. Very large sparse user IDs can create large strings; in that case, map external IDs to compact internal offsets first.
+
 ### Redis as a Cache
 
 The most common deployment scenario of Redis is as a cache. In this case, the root keys and values of Redis map to the keys and values in our cache. Redis can distribute this hash map trivially across all the nodes of our cluster enabling us to scale without much fuss - if we need more capacity we simply add nodes to the cluster.

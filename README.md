@@ -8,7 +8,7 @@ This repo contains Redis notes and thirteen runnable example areas:
 - `Redis-GlobalId-Demo`: Spring Boot 3 REST service demonstrating Redis `INCRBY` segment allocation for global IDs in sharded database/table scenarios.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
-- `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
+- `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, online users, retention, and multi-day activity stats.
 - `Redis-Geo-Demo`: Spring Boot 3 REST service demonstrating Redis GEO nearby-shop search with coordinates and distances.
 - `Redis-Lock-Demo`: Spring Boot 3 REST service demonstrating custom Redis locks and Redisson `RLock`.
 - `Redis-Autocomplete-Demo`: Spring Boot 3 REST service demonstrating Redis Stack RediSearch suggestion dictionaries, ranked prefix suggestions, and fuzzy autocomplete.
@@ -53,7 +53,7 @@ Redis-HttpSession-Demo/    Spring Boot 3 Maven: distributed data sharing via Red
 Redis-GlobalId-Demo/       Spring Boot 3 Maven: Redis INCRBY global ID segment allocation
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
-Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
+Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap sign-in, online users, retention
 Redis-Geo-Demo/            Spring Boot 3 Maven: Redis GEO nearby-shop search
 Redis-Lock-Demo/           Spring Boot 3 Maven: custom Redis lock and Redisson RLock
 Redis-Autocomplete-Demo/   Spring Boot 3 Maven: Redis Stack RediSearch autocomplete suggestions
@@ -1096,7 +1096,7 @@ redis-cli zscore delay:order:close order-2001
 
 ## Run Redis-BitMap-Demo
 
-`Redis-BitMap-Demo` is a Spring Boot 3 Maven demo for daily user sign-in tracking with Redis bitmaps. Each user/month maps to one bitmap key, where bit offset `0` is day 1, offset `1` is day 2, and so on.
+`Redis-BitMap-Demo` is a Spring Boot 3 Maven demo for Redis bitmap analytics. It includes daily user sign-in tracking and user activity statistics such as online users, retention, and users who were online every day for a date range.
 
 ### What it demonstrates
 
@@ -1106,6 +1106,8 @@ redis-cli zscore delay:order:close order-2001
 | `GETBIT` | Check whether a user signed in on a date |
 | `BITCOUNT` | Count signed-in days for a month |
 | `BITFIELD` | Read month-to-date bits and calculate the current streak |
+| `BITOP AND` | Find users active on every day in a date range, or retained across two dates |
+| `BITOP OR` | Find users active on any day in a date range |
 
 ### Prerequisites
 
@@ -1176,6 +1178,66 @@ curl "http://localhost:8080/sign/42/summary?date=2026-04-20"
 redis-cli getbit sign:42:202604 19
 redis-cli bitcount sign:42:202604
 redis-cli bitfield sign:42:202604 get u20 0
+```
+
+### Online users and retention use case
+
+For activity stats, each day maps to one bitmap key:
+
+```text
+activity:online:20260520
+activity:online:20260521
+...
+```
+
+The user ID is the bit offset. Mark user `42` online on a date:
+
+```bash
+curl -X POST "http://localhost:8080/activity/online/42?date=2026-05-20"
+```
+
+Seed a few users across a 7-day range:
+
+```bash
+for d in 20 21 22 23 24 25 26; do
+  curl -s -X POST "http://localhost:8080/activity/online/42?date=2026-05-$d" > /dev/null
+done
+curl -X POST "http://localhost:8080/activity/online/7?date=2026-05-20"
+curl -X POST "http://localhost:8080/activity/online/7?date=2026-05-26"
+```
+
+Count users who were online every day for 7 days (`BITOP AND`) and users who were online on any day (`BITOP OR`):
+
+```bash
+curl "http://localhost:8080/activity/stats?start=2026-05-20&days=7"
+```
+
+Example response:
+
+```json
+{
+  "startDate": "2026-05-20",
+  "endDate": "2026-05-26",
+  "allDaysOnlineUsers": 1,
+  "anyDayOnlineUsers": 2
+}
+```
+
+Calculate retention from one day to another:
+
+```bash
+curl "http://localhost:8080/activity/retention?base=2026-05-20&retained=2026-05-26"
+```
+
+Inspect Redis directly:
+
+```bash
+redis-cli bitcount activity:online:20260520
+redis-cli bitop and activity:result:and:20260520:7 \
+  activity:online:20260520 activity:online:20260521 activity:online:20260522 \
+  activity:online:20260523 activity:online:20260524 activity:online:20260525 \
+  activity:online:20260526
+redis-cli bitcount activity:result:and:20260520:7
 ```
 
 ## Run Redis-Geo-Demo
