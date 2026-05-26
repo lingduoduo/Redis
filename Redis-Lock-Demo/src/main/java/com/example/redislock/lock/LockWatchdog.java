@@ -4,9 +4,10 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
+import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -34,6 +35,12 @@ public class LockWatchdog {
     private final StringRedisTemplate redisTemplate;
 
     private static final int POOL_SIZE = 2;
+    private static final DefaultRedisScript<Long> RENEW_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+                    " return redis.call('expire', KEYS[1], ARGV[2]) " +
+                    "else return 0 end",
+            Long.class
+    );
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(
             POOL_SIZE,
@@ -57,10 +64,7 @@ public class LockWatchdog {
         
         return scheduler.scheduleAtFixedRate(() -> {
             try {
-                String currentVal = redisTemplate.opsForValue().get(key);
-                
-                if (value.equals(currentVal)) {
-                    redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
+                if (renewIfOwned(key, value, ttlSeconds)) {
                     log.debug("Lock renewed: key={}, newTTL={} seconds", key, ttlSeconds);
                 } else {
                     log.debug("Lock renewal skipped because owner changed or lock expired: key={}", key);
@@ -69,6 +73,17 @@ public class LockWatchdog {
                 log.error("Error renewing lock: key={}", key, e);
             }
         }, renewalIntervalSeconds, renewalIntervalSeconds, TimeUnit.SECONDS);
+    }
+
+    boolean renewIfOwned(String key, String value, long ttlSeconds) {
+        validate(key, value, ttlSeconds);
+        Long result = redisTemplate.execute(
+                RENEW_SCRIPT,
+                Collections.singletonList(key),
+                value,
+                String.valueOf(ttlSeconds)
+        );
+        return result != null && result > 0;
     }
 
     /**

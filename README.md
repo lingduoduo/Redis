@@ -1348,11 +1348,28 @@ The Redisson example stores stock in `flash:stock:{productId}`, locks stock with
 
 ### Test the custom RedisLock guarantees
 
-The custom lock implementation in `RedisLock.java` must follow three rules:
+The custom lock implementation in `RedisLock.java` must follow these rules:
 
 - Acquire with `SET NX EX`: `StringRedisTemplate.setIfAbsent(key, uuid, Duration)` writes the value only when the key does not exist and sets the TTL in the same Redis operation.
 - Release with Lua: `unlock(key, token)` runs a compare-and-delete script so the owner check and `DEL` happen atomically.
 - Store a UUID value: `tryLockWithToken(...)` returns a UUID token, and callers must pass the same token to `unlock(...)` to avoid deleting another request's lock.
+- Renew with Lua: `LockWatchdog` only extends the TTL when the Redis value still matches the caller's UUID token.
+
+Avoid this common implementation:
+
+```java
+Long flag = jedis.setnx(key, "1");
+if (flag == 1) {
+    jedis.expire(key, 10);
+}
+jedis.del(key);
+```
+
+It has three correctness risks:
+
+- `SETNX` and `EXPIRE` are separate commands. If the process crashes between them, the lock may never expire.
+- Every caller stores the same value (`"1"`), so release cannot prove ownership.
+- Plain `DEL` can delete another request's lock after the first request's lock expired and a second request acquired it.
 
 Run the app and keep Redis CLI open:
 
