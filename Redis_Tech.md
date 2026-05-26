@@ -37,6 +37,53 @@ HLEN cart:u42              # product kind count
 
 If decrementing makes the quantity zero or negative, delete the field so the cart only stores positive quantities. This pattern works well for user carts, per-user counters, feature flags, and profile fragments where fields are independently updated.
 
+### Redis Lists for User Timelines
+
+Redis Lists are a good fit for simple message timelines where insertion order is the desired order. Use one list per user:
+
+```
+key   = timeline:{userId}
+value = serialized message
+```
+
+Common operations:
+
+```
+LPUSH timeline:u42 "{...message...}"  # newest message first
+LRANGE timeline:u42 0 19              # newest page
+LTRIM timeline:u42 0 99               # keep newest 100
+LLEN timeline:u42                     # timeline size
+```
+
+This works well for inboxes, notification lists, recent activity feeds, and fanout-on-write timelines. Redis stores the list in insertion order, so `LPUSH` plus `LRANGE 0 N` gives a direct newest-first timeline.
+
+Tradeoffs: List pagination by offset can become less ideal for deep pages, and Lists do not reorder by arbitrary timestamps. If you need score-based ordering, deduplication by member ID, or cursor pagination by timestamp, use a Sorted Set.
+
+### Redis Sorted Sets for Timelines
+
+Redis Sorted Sets extend the List timeline pattern with score-based ordering. Use one sorted set per user:
+
+```
+key    = timeline:{userId}
+score  = epoch-millis of the message timestamp
+member = JSON-serialized message (UUID keeps members unique)
+```
+
+Common operations:
+
+```
+ZADD timeline:u42 1716912000000 "{...message...}"   # publish
+ZREVRANGEBYSCORE timeline:u42 +inf -inf LIMIT 0 20  # newest page (first)
+ZREVRANGEBYSCORE timeline:u42 <cursor> -inf LIMIT 0 20  # next cursor page
+ZREVRANGEBYSCORE timeline:u42 <toMs> <fromMs>       # time-range query
+ZREMRANGEBYRANK timeline:u42 0 -(maxLength+1)       # trim oldest
+ZCARD timeline:u42                                  # timeline size
+```
+
+Cursor pagination: the `nextCursor` for the next page is `score(lastItem) - 1`. Pass it as the upper score bound in the next `ZREVRANGEBYSCORE`. A `null` cursor means the timeline is exhausted.
+
+This pattern is preferred over Lists when you need timestamp-based range queries, deduplication by member, or cursor pagination that doesn't degrade on deep pages.
+
 ### Redis for Bitmap Statistics
 
 Redis bitmaps are compact counters for boolean user facts. If user IDs are numeric, you can use the user ID as the bit offset:
