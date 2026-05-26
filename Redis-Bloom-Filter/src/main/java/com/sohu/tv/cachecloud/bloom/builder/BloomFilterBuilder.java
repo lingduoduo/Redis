@@ -14,12 +14,6 @@ import com.sohu.tv.cachecloud.bloom.impl.CacheCloudBloomFilter;
 import redis.clients.jedis.JedisCluster;
 
 
-/**
- * Bloom filter builder.
- * @author leifu
- * @Date April 16, 2017
- * @Time 6:28:53 PM
- */
 public class BloomFilterBuilder {
     private static final Logger logger = LoggerFactory.getLogger(BloomFilterBuilder.class);
     

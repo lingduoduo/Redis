@@ -3,12 +3,7 @@ package com.sohu.tv.cachecloud.bloom.hash;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Murmur2-based hash function.
- * @author leifu
- * @Date April 16, 2017
- * @Time 10:35:17 PM
- */
+
 public class Murmur2HashFunction extends HashFunction {
 
     private static final long serialVersionUID = -3640249373409996794L;

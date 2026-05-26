@@ -20,14 +20,6 @@ import com.sohu.tv.cachecloud.bloom.hash.HashFunction;
 import redis.clients.jedis.JedisCluster;
 import redis.clients.jedis.util.JedisClusterCRC16;
 
-/**
- * CacheCloud bloom filter.
- * 
- * @author leifu
- * @Date April 13, 2017
- * @Time 5:01:35 PM
- * @param <T>
- */
 public class CacheCloudBloomFilter<T> implements BloomFilter<T> {
     
     private static final Logger logger = LoggerFactory.getLogger(CacheCloudBloomFilter.class);

@@ -3,12 +3,7 @@ package com.sohu.tv.cachecloud.bloom.hash;
 import java.io.Serializable;
 import java.util.List;
 
-/**
- * Hash function base class.
- * @author leifu
- * @Date April 16, 2017
- * @Time 5:25:42 PM
- */
+
 public abstract class HashFunction implements Serializable {
     
     private static final long serialVersionUID = -1074935532939858765L;

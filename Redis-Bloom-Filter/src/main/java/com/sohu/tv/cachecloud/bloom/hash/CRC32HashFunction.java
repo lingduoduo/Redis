@@ -5,12 +5,7 @@ import java.util.List;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
-/**
- * CRC32-based hash function.
- * @author leifu
- * @Date April 16, 2017
- * @Time 9:56:30 PM
- */
+
 public class CRC32HashFunction extends HashFunction {
 
     private static final long serialVersionUID = 3175307974705695650L;

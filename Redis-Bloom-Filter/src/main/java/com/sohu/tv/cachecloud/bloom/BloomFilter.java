@@ -3,12 +3,7 @@ package com.sohu.tv.cachecloud.bloom;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Bloom filter interface.
- * @author leifu
- * @Date April 13, 2017
- * @Time 4:43:00 PM
- */
+
 public interface BloomFilter<T> {
 
     /**
