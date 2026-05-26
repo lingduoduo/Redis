@@ -44,6 +44,33 @@ The app then enables Redis-backed sessions and sets a TTL:
 
 Typical data stored here includes login user IDs, auth metadata, verification-code state, and small shopping-cart drafts. Keep this data small and expiration-bound. Redis-backed session state improves horizontal scaling and failover compared with local JVM sessions, but it should not become the source of truth for durable business data.
 
+### Redis for Global ID Segments
+
+Redis counters are a simple way to allocate globally unique numeric IDs. For sharded database/table systems, an application often needs an ID before it can decide which shard or table to write to.
+
+Calling Redis once per ID works, but it adds a network round trip to every insert:
+
+```
+INCR global:id:user
+```
+
+A higher-throughput pattern is segment allocation. Each app instance asks Redis for a block of IDs with `INCRBY`, then serves IDs from memory until the local block is exhausted:
+
+```
+INCRBY global:id:user 1000 # returns 1000, app owns 1..1000
+INCRBY global:id:user 1000 # returns 2000, app owns 1001..2000
+```
+
+The returned value is the segment end. The segment start is `end - step + 1`. For example, if `INCRBY global:id:user 1000` returns `5000`, the caller owns IDs `4001..5000`.
+
+This is a good fit for:
+
+- user IDs, order IDs, payment IDs, or other numeric primary keys
+- sharded table routing such as `user_${userId % 16}`
+- reducing Redis QPS by reserving `1000` or `10000` IDs at a time
+
+Tradeoffs: if an app crashes before using the whole segment, some IDs are skipped. That is usually acceptable for unique IDs, but not acceptable when IDs must be gapless. Redis persistence and replication still matter because losing the counter can cause duplicate ranges after failover.
+
 ### Redis as a Distributed Lock
 
 Another common use of Redis in system design settings is as a distributed lock. Occasionally we have data in our system and we need to maintain consistency during updates (e.g. the very common Design Ticketmaster system design question), or we need to make sure multiple people aren't performing an action at the same time (e.g. Design Uber).

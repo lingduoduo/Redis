@@ -1,10 +1,11 @@
 # Redis Examples
 
-This repo contains Redis notes and twelve runnable example areas:
+This repo contains Redis notes and thirteen runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating data sharing across distributed app instances with Redis-backed `HttpSession`.
+- `Redis-GlobalId-Demo`: Spring Boot 3 REST service demonstrating Redis `INCRBY` segment allocation for global IDs in sharded database/table scenarios.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
@@ -21,7 +22,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Redis-Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-GlobalId-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -49,6 +50,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
 Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: distributed data sharing via Redis-backed HttpSession
+Redis-GlobalId-Demo/       Spring Boot 3 Maven: Redis INCRBY global ID segment allocation
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
@@ -543,6 +545,104 @@ The final response should include the draft content and counter while `serverNod
 ```bash
 redis-cli keys "spring:session:demo:*"
 redis-cli hgetall "spring:session:demo:sessions:<sessionId>"
+```
+
+## Run Redis-GlobalId-Demo
+
+`Redis-GlobalId-Demo` is a Spring Boot 3 Maven demo for global ID generation with Redis `INCRBY` segment allocation. It is useful for sharded database/table writes where every app instance needs unique IDs before routing data to shards.
+
+Instead of asking Redis for every single ID, the app reserves a range:
+
+```text
+INCRBY global:id:user 1000 -> 1000
+allocated segment: 1..1000
+
+INCRBY global:id:user 1000 -> 2000
+allocated segment: 1001..2000
+```
+
+Each app instance can then issue IDs from its local segment until it is exhausted. This reduces Redis round trips while keeping IDs globally unique.
+
+### What it demonstrates
+
+| Endpoint | Description |
+|---|---|
+| `POST /ids/segments/{bizTag}?step=1000` | Reserves a new Redis-backed ID segment for a business type |
+| `POST /ids/{bizTag}/next?step=1000` | Returns the next local ID, reserving a segment when needed |
+| `GET /ids/{bizTag}/redis-key` | Shows the Redis key used for a business type |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-GlobalId-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-GlobalId-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8082`.
+
+### Reserve ID segments
+
+Reserve 1000 user IDs at once:
+
+```bash
+curl -X POST "http://localhost:8082/ids/segments/user?step=1000"
+```
+
+Example response:
+
+```json
+{
+  "bizTag": "user",
+  "redisKey": "global:id:user",
+  "start": 1,
+  "end": 1000,
+  "step": 1000
+}
+```
+
+Get individual IDs from a locally cached segment:
+
+```bash
+curl -X POST "http://localhost:8082/ids/user/next?step=1000"
+curl -X POST "http://localhost:8082/ids/user/next?step=1000"
+```
+
+Use different `bizTag` values for independent sequences, such as `user`, `order`, or `payment`.
+
+### Sharding example
+
+After generating a global ID, route it to a physical table with a modulo rule:
+
+```text
+tableIndex = userId % 16
+tableName = user_${tableIndex}
+```
+
+The Redis key `global:id:user` only allocates unique numbers. The database/table routing rule stays in the application or sharding middleware.
+
+### Inspect Redis keys
+
+```bash
+redis-cli get global:id:user
+redis-cli incrby global:id:user 1000
 ```
 
 ## Run Redis-RankService-Demo
