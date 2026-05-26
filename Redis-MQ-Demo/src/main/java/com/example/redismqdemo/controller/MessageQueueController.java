@@ -1,13 +1,16 @@
 package com.example.redismqdemo.controller;
 
 import com.example.redismqdemo.model.DelayOrderRequest;
+import com.example.redismqdemo.model.ListPushRequest;
 import com.example.redismqdemo.model.OrderMessageRequest;
 import com.example.redismqdemo.service.DelayQueueService;
+import com.example.redismqdemo.service.ListQueueService;
 import com.example.redismqdemo.service.StreamConsumerService;
 import com.example.redismqdemo.service.StreamProducerService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,13 +23,16 @@ public class MessageQueueController {
     private final StreamProducerService streamProducerService;
     private final StreamConsumerService streamConsumerService;
     private final DelayQueueService delayQueueService;
+    private final ListQueueService listQueueService;
 
     public MessageQueueController(StreamProducerService streamProducerService,
                                   StreamConsumerService streamConsumerService,
-                                  DelayQueueService delayQueueService) {
+                                  DelayQueueService delayQueueService,
+                                  ListQueueService listQueueService) {
         this.streamProducerService = streamProducerService;
         this.streamConsumerService = streamConsumerService;
         this.delayQueueService = delayQueueService;
+        this.listQueueService = listQueueService;
     }
 
     @PostMapping("/stream/order")
@@ -66,6 +72,56 @@ public class MessageQueueController {
     @GetMapping("/stream/processed")
     public List<String> processedStream(@RequestParam(defaultValue = "10") int n) {
         return streamConsumerService.recentProcessedOrders(n);
+    }
+
+    /**
+     * RPUSH — push a message onto the tail of a named list queue.
+     */
+    @PostMapping("/list/{queueName}/push")
+    public Map<String, Object> listPush(
+            @PathVariable String queueName,
+            @Valid @RequestBody ListPushRequest request) {
+        long size = listQueueService.push(queueName, request.message());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", "message pushed");
+        result.put("queueKey", listQueueService.queueKey(queueName));
+        result.put("payload", request.message());
+        result.put("queueSize", size);
+        return result;
+    }
+
+    /**
+     * BLPOP (mode=fifo, default) or BRPOP (mode=stack) — blocking pop.
+     * Blocks up to timeoutSecs waiting for a message; returns received=false on timeout.
+     */
+    @PostMapping("/list/{queueName}/pop")
+    public Map<String, Object> listPop(
+            @PathVariable String queueName,
+            @RequestParam(defaultValue = "fifo") String mode,
+            @RequestParam(defaultValue = "5") long timeoutSecs) {
+        Duration timeout = Duration.ofSeconds(timeoutSecs);
+        String payload = "stack".equalsIgnoreCase(mode)
+                ? listQueueService.popStack(queueName, timeout)
+                : listQueueService.popFifo(queueName, timeout);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("queueKey", listQueueService.queueKey(queueName));
+        result.put("mode", mode);
+        result.put("received", payload != null);
+        result.put("payload", payload);
+        return result;
+    }
+
+    /**
+     * LLEN — current number of messages waiting in the queue.
+     */
+    @GetMapping("/list/{queueName}/size")
+    public Map<String, Object> listSize(@PathVariable String queueName) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("queueKey", listQueueService.queueKey(queueName));
+        result.put("size", listQueueService.size(queueName));
+        return result;
     }
 
     @GetMapping("/stream/info")
