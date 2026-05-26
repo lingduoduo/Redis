@@ -235,6 +235,7 @@ redis-cli ttl "product:1"           # check remaining TTL
 - Spring AOP to enforce limits before the endpoint runs.
 - Redis sorted sets plus a Lua script for atomic sliding-window checks.
 - Batched user and IP buckets in one Redis script call.
+- A simple fixed-window counter limiter using Redis `INCR` plus TTL for IP/user/operation keys.
 
 The demo endpoint is:
 
@@ -244,6 +245,13 @@ The demo endpoint is:
 public String create() {
     return "ok";
 }
+```
+
+The simpler counter endpoint is:
+
+```java
+@PostMapping("/counter-limit/order")
+public boolean createWithCounterLimit(HttpServletRequest request)
 ```
 
 ### Prerequisites
@@ -356,6 +364,34 @@ Once the sliding window is full, responses return `429 Too Many Requests`:
 ```
 
 Wait about one second and try again; old entries expire out of the sliding window.
+
+### Try the INCR counter limiter
+
+This endpoint uses a fixed-window integer counter. The key is built from client IP, `X-User-Id`, and operation name:
+
+```text
+rl:counter:{ip}:{userId}:order:create
+```
+
+Each request increments the counter. The first request sets a TTL, and requests above the limit return `false`:
+
+```bash
+for i in {1..12}; do
+  curl -s -X POST http://localhost:8080/counter-limit/order \
+    -H "X-User-Id: 42" \
+    -H "X-Forwarded-For: 203.0.113.10"
+  echo
+done
+```
+
+The demo allows 10 requests per 60 seconds for the same IP/user/operation tuple.
+
+Inspect the fixed-window counter:
+
+```bash
+redis-cli get "rl:counter:203.0.113.10:42:order:create"
+redis-cli ttl "rl:counter:203.0.113.10:42:order:create"
+```
 
 ### Inspect Redis keys
 
