@@ -1,11 +1,12 @@
 # Redis Examples
 
-This repo contains Redis notes and thirteen runnable example areas:
+This repo contains Redis notes and fourteen runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
 - `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating data sharing across distributed app instances with Redis-backed `HttpSession`.
 - `Redis-GlobalId-Demo`: Spring Boot 3 REST service demonstrating Redis `INCRBY` segment allocation for global IDs in sharded database/table scenarios.
+- `Redis-Hash-Demo`: Spring Boot 3 REST service demonstrating Redis Hash shopping carts with user ID keys, product ID fields, and quantity values.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, online users, retention, and multi-day activity stats.
@@ -22,7 +23,7 @@ Older Redis command notes are kept in `README_bk.md`, and the deeper study notes
 
 - Java 17 or newer (`Redis-Cache-Demo` requires 17; `Redis-Test` works on 11+)
 - Gradle wrapper, already included under `Redis-Test`
-- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-GlobalId-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
+- Maven (`Redis-Cache-Demo`, `Redis-RateLimit-Demo`, `Redis-HttpSession-Demo`, `Redis-GlobalId-Demo`, `Redis-Hash-Demo`, `Redis-Lock-Demo`, and `Redis-Bloom-Filter`)
 - Python 3.9+
 - Redis server or Redis Stack, depending on the example
 
@@ -51,6 +52,7 @@ Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, log
 Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
 Redis-HttpSession-Demo/    Spring Boot 3 Maven: distributed data sharing via Redis-backed HttpSession
 Redis-GlobalId-Demo/       Spring Boot 3 Maven: Redis INCRBY global ID segment allocation
+Redis-Hash-Demo/           Spring Boot 3 Maven: Redis Hash shopping cart item quantities
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap sign-in, online users, retention
@@ -679,6 +681,109 @@ The Redis key `global:id:user` only allocates unique numbers. The database/table
 ```bash
 redis-cli get global:id:user
 redis-cli incrby global:id:user 1000
+```
+
+## Run Redis-Hash-Demo
+
+`Redis-Hash-Demo` is a Spring Boot 3 Maven demo for shopping-cart item quantities with Redis Hashes.
+
+Data model:
+
+```text
+key   = cart:{userId}
+field = {productId}
+value = quantity
+```
+
+For example, user `u42` adding product `p1001` stores:
+
+```text
+HINCRBY cart:u42 p1001 1
+```
+
+### What it demonstrates
+
+| Redis command | Used for |
+|---|---|
+| `HINCRBY` | Add or subtract product quantity |
+| `HDEL` | Remove a product from the cart |
+| `HGETALL` | Return all products and quantities |
+| `HLEN` | Count product kinds in the cart |
+
+### Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Redis running on `localhost:6379` with no password
+
+```bash
+redis-server --port 6379
+redis-cli -p 6379 ping
+```
+
+### Build and test
+
+```bash
+cd Redis-Hash-Demo
+mvn test
+```
+
+### Run
+
+```bash
+cd Redis-Hash-Demo
+mvn spring-boot:run
+```
+
+The server starts on `http://localhost:8086`.
+
+### Shopping cart flow
+
+Add one product:
+
+```bash
+curl -X POST http://localhost:8086/carts/u42/items/p1001/increment
+```
+
+Subtract one product:
+
+```bash
+curl -X POST http://localhost:8086/carts/u42/items/p1001/decrement
+```
+
+Add or subtract an arbitrary amount:
+
+```bash
+curl -X POST "http://localhost:8086/carts/u42/items/p1001/delta?delta=3"
+curl -X POST "http://localhost:8086/carts/u42/items/p1001/delta?delta=-2"
+```
+
+Get all cart items:
+
+```bash
+curl http://localhost:8086/carts/u42
+```
+
+Count product kinds:
+
+```bash
+curl http://localhost:8086/carts/u42/size
+```
+
+Remove a product:
+
+```bash
+curl -X DELETE http://localhost:8086/carts/u42/items/p1001
+```
+
+Inspect Redis directly:
+
+```bash
+redis-cli hincrby cart:u42 p1001 1
+redis-cli hincrby cart:u42 p1001 -1
+redis-cli hgetall cart:u42
+redis-cli hlen cart:u42
+redis-cli hdel cart:u42 p1001
 ```
 
 ## Run Redis-RankService-Demo

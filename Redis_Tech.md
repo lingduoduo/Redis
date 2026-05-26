@@ -15,6 +15,28 @@ Some of the most fundamental data structures supported by Redis:
 - Geospatial Indexes
 - Time Series
 
+### Redis Hashes for Shopping Carts
+
+Redis Hashes are a natural fit for small per-user objects. A shopping cart can use one hash per user:
+
+```
+key   = cart:{userId}
+field = {productId}
+value = quantity
+```
+
+Common operations map directly to hash commands:
+
+```
+HINCRBY cart:u42 p1001 1   # +1 item
+HINCRBY cart:u42 p1001 -1  # -1 item
+HDEL cart:u42 p1001        # remove item
+HGETALL cart:u42           # all items
+HLEN cart:u42              # product kind count
+```
+
+If decrementing makes the quantity zero or negative, delete the field so the cart only stores positive quantities. This pattern works well for user carts, per-user counters, feature flags, and profile fragments where fields are independently updated.
+
 ### Redis for Bitmap Statistics
 
 Redis bitmaps are compact counters for boolean user facts. If user IDs are numeric, you can use the user ID as the bit offset:
