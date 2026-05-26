@@ -152,6 +152,15 @@ INCR expensive_service_rate_limit # 5
 EXPIRE expensive_service_rate_limit 60 LT
 ```
 
+For a visitor-scoped limiter, build the key from stable request dimensions such as IP, user ID, and operation:
+
+```
+INCR rl:counter:203.0.113.10:user42:order:create
+EXPIRE rl:counter:203.0.113.10:user42:order:create 60
+```
+
+The first request in the window sets the TTL. If the incremented value is greater than the max allowed count, return false or reject the request. This fixed-window counter is cheap and easy to understand, but it can allow boundary bursts: a client may use the full quota at the end of one window and again at the start of the next.
+
 If you need a sliding window, you can store timestamps in a Sorted Set per key and remove old entries before counting; run the check in Lua to keep it atomic.
 
 ### Redis for Proximity Search
