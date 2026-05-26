@@ -4,7 +4,7 @@ This repo contains Redis notes and twelve runnable example areas:
 
 - `Redis-Cache-Demo`: Spring Boot 3 REST service demonstrating cache penetration, cache stampede (mutex lock), and cache stampede (logical expiration) with Bloom filter, null-value sentinel, and distributed lock.
 - `Redis-RateLimit-Demo`: Spring Boot 3 REST service demonstrating Redis + Lua sliding-window rate limiting with annotation-based AOP.
-- `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating Redis-backed `HttpSession` sharing across app instances.
+- `Redis-HttpSession-Demo`: Spring Boot 3 REST service demonstrating data sharing across distributed app instances with Redis-backed `HttpSession`.
 - `Redis-RankService-Demo`: Spring Boot 3 REST service demonstrating Redis sorted-set leaderboards — article daily rankings (view/like scoring) and a generic multi-leaderboard API with around-me queries.
 - `Redis-MQ-Demo`: Spring Boot 3 REST service demonstrating Redis Streams consumer groups and sorted-set delayed queues for order workflows.
 - `Redis-BitMap-Demo`: Spring Boot 3 REST service demonstrating Redis bitmap daily sign-in, monthly counts, and current streaks.
@@ -48,7 +48,7 @@ For a local Redis instance without auth, remove or blank the `password` value.
 ```text
 Redis-Cache-Demo/          Spring Boot 3 Maven: cache penetration, stampede, logical expiry
 Redis-RateLimit-Demo/      Spring Boot 3 Maven: Redis Lua sliding-window API rate limit
-Redis-HttpSession-Demo/    Spring Boot 3 Maven: Redis-backed HttpSession sharing
+Redis-HttpSession-Demo/    Spring Boot 3 Maven: distributed data sharing via Redis-backed HttpSession
 Redis-RankService-Demo/    Spring Boot 3 Maven: Redis sorted-set leaderboards and article metrics
 Redis-MQ-Demo/             Spring Boot 3 Maven: Redis Streams and ZSET delayed queue
 Redis-BitMap-Demo/         Spring Boot 3 Maven: Redis bitmap daily sign-in
@@ -370,7 +370,15 @@ When requests pass through a proxy that sets `X-Forwarded-For`, the IP bucket us
 
 ## Run Redis-HttpSession-Demo
 
-`Redis-HttpSession-Demo` is a Spring Boot 3 Maven demo for sharing servlet `HttpSession` state through Redis. It uses Spring Session Data Redis so multiple app instances can read the same login session when the client sends the same `SESSION` cookie.
+`Redis-HttpSession-Demo` is a Spring Boot 3 Maven demo for using Redis as a small, shared data layer between distributed application instances. The most common web use case is distributed Session: instead of keeping servlet `HttpSession` only in one JVM, Spring Session stores it in Redis so any app instance can read the same login state when the client sends the same `SESSION` cookie.
+
+This is a good fit for:
+
+- Horizontal scaling behind a load balancer, especially when requests are not sticky to one node.
+- Shared login state, verification-code state, shopping-cart drafts, or other short-lived per-user data.
+- Stateless application instances where restart/redeploy should not immediately drop active sessions.
+
+It is not a replacement for durable business data storage. Session data should stay small, serializable, TTL-bound, and safe to discard after expiration.
 
 ### What it demonstrates
 
@@ -380,6 +388,10 @@ When requests pass through a proxy that sets `X-Forwarded-For`, the IP bucket us
 | `POST /auth/login` | Stores `loginUser`, `loginTime`, and `loginTraceId` in the Redis-backed session |
 | `GET /auth/me` | Reads the current session attributes |
 | `POST /auth/logout` | Invalidates the current session and removes it from Redis |
+| `GET /shared-session` | Reads short-lived shared data from the current Redis-backed session |
+| `PUT /shared-session/draft` | Stores a small draft value in the current session |
+| `POST /shared-session/counter/increment` | Increments a per-session counter |
+| `DELETE /shared-session` | Clears the demo shared-data attributes from the current session |
 
 ### Prerequisites
 
@@ -403,6 +415,21 @@ spring:
     timeout: 30m
     redis:
       namespace: spring:session:demo
+```
+
+The Spring Session Redis dependency is already included in `Redis-HttpSession-Demo/pom.xml`:
+
+```xml
+<dependency>
+  <groupId>org.springframework.session</groupId>
+  <artifactId>spring-session-data-redis</artifactId>
+</dependency>
+```
+
+`SessionConfig` enables Redis-backed servlet sessions:
+
+```java
+@EnableRedisHttpSession(maxInactiveIntervalInSeconds = 1800)
 ```
 
 The app defaults to port `8080`. If another demo is already using it, pass a different port:
@@ -493,6 +520,23 @@ curl -b /tmp/cookies.txt -X POST http://localhost:8081/auth/logout
 curl -b /tmp/cookies.txt http://localhost:8080/auth/me
 # "authenticated": false — session was invalidated in Redis
 ```
+
+### Test distributed shared data
+
+Use the same cookie file to store small shared data on one node and read it from another node:
+
+```bash
+curl -c /tmp/shared-session.cookies -X PUT http://localhost:8080/shared-session/draft \
+  -H "Content-Type: application/json" \
+  -d '{"content":"checkout draft saved on node-a"}'
+
+curl -b /tmp/shared-session.cookies -X POST \
+  http://localhost:8080/shared-session/counter/increment
+
+curl -b /tmp/shared-session.cookies http://localhost:8081/shared-session
+```
+
+The final response should include the draft content and counter while `serverNode` is `node-b`, proving the data was shared through Redis-backed `HttpSession`.
 
 **Inspect Redis session keys at any point:**
 
