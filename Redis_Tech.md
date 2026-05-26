@@ -71,6 +71,34 @@ This is a good fit for:
 
 Tradeoffs: if an app crashes before using the whole segment, some IDs are skipped. That is usually acceptable for unique IDs, but not acceptable when IDs must be gapless. Redis persistence and replication still matter because losing the counter can cause duplicate ranges after failover.
 
+### Redis for Delayed Counter Sync
+
+Redis `INCR` is a natural fit for high-frequency counters such as article views, likes, downloads, shares, or profile visits. For these counters, the user-facing number usually needs to update quickly, while the database can lag by a few seconds or minutes.
+
+A common pattern is:
+
+```
+INCR article:view:1001
+SADD article:dirty:view 1001
+```
+
+The request path only writes Redis. A background job periodically drains dirty IDs, reads the latest Redis values, and writes snapshots to the database:
+
+```
+SPOP article:dirty:view
+GET article:view:1001
+UPDATE article_counter SET views = <redis-value> WHERE article_id = 1001
+```
+
+This reduces database write pressure because many increments collapse into one database update. It is a good fit when counters tolerate eventual consistency.
+
+Important tradeoffs:
+
+- Redis should enable persistence or replication if losing recent increments is unacceptable.
+- Database values are stale between sync runs, so reads that need the freshest count should read Redis.
+- Sync by snapshot (`SET db_count = redis_count`) is idempotent and easy to retry. Sync by delta needs more careful atomic drain logic.
+- Hot counters can still become hot keys; batching DB writes does not remove Redis-side hot key pressure.
+
 ### Redis as a Distributed Lock
 
 Another common use of Redis in system design settings is as a distributed lock. Occasionally we have data in our system and we need to maintain consistency during updates (e.g. the very common Design Ticketmaster system design question), or we need to make sure multiple people aren't performing an action at the same time (e.g. Design Uber).

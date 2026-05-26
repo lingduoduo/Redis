@@ -1,9 +1,12 @@
 package com.example.redisrankdemo.controller;
 
+import com.example.redisrankdemo.model.ArticleCounterSnapshot;
 import com.example.redisrankdemo.model.ArticleStats;
 import com.example.redisrankdemo.model.LikeRequest;
 import com.example.redisrankdemo.model.ViewRequest;
+import com.example.redisrankdemo.repository.ArticleCounterRepository;
 import com.example.redisrankdemo.service.ArticleMetricService;
+import com.example.redisrankdemo.service.ArticleCounterSyncService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,9 +18,15 @@ import java.util.Map;
 public class ArticleController {
 
     private final ArticleMetricService articleMetricService;
+    private final ArticleCounterRepository articleCounterRepository;
+    private final ArticleCounterSyncService articleCounterSyncService;
 
-    public ArticleController(ArticleMetricService articleMetricService) {
+    public ArticleController(ArticleMetricService articleMetricService,
+                             ArticleCounterRepository articleCounterRepository,
+                             ArticleCounterSyncService articleCounterSyncService) {
         this.articleMetricService = articleMetricService;
+        this.articleCounterRepository = articleCounterRepository;
+        this.articleCounterSyncService = articleCounterSyncService;
     }
 
     @PostMapping("/read")
@@ -47,6 +56,17 @@ public class ArticleController {
     @GetMapping("/{articleId}/stats")
     public ArticleStats stats(@PathVariable Long articleId) {
         return articleMetricService.stats(articleId);
+    }
+
+    @GetMapping("/{articleId}/db-counters")
+    public ArticleCounterSnapshot dbCounters(@PathVariable Long articleId) {
+        return articleCounterRepository.findByArticleId(articleId);
+    }
+
+    @PostMapping("/counters/sync")
+    public Map<String, Object> syncCounters() {
+        articleCounterSyncService.syncDirtyArticleCounters();
+        return Map.of("message", "counter sync triggered");
     }
 
     @PostMapping("/{articleId}/view")

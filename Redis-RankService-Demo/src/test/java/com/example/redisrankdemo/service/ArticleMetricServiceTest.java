@@ -44,6 +44,7 @@ class ArticleMetricServiceTest {
 
         assertThat(service.incrView(1L)).isEqualTo(3L);
         verify(valueOps).increment("article:view:1");
+        verify(setOps).add("article:dirty:view", "1");
     }
 
     @Test
@@ -86,6 +87,8 @@ class ArticleMetricServiceTest {
         assertThat(views).isEqualTo(10L);
         verify(valueOps).increment("article:view:1");
         verify(valueOps).increment("article:pv:1");
+        verify(setOps).add("article:dirty:view", "1");
+        verify(setOps).add("article:dirty:pv", "1");
         verify(rankService).addScore("article:1", 1.0);
     }
 
@@ -96,6 +99,7 @@ class ArticleMetricServiceTest {
         long likes = service.recordLike(1L, "u42");
 
         assertThat(likes).isEqualTo(7L);
+        verify(setOps).add("article:dirty:like", "1");
         verify(rankService).addScore("article:1", 5.0);
     }
 
