@@ -31,34 +31,34 @@ public class ProductTagService {
     @PostConstruct
     void seedDefaultTags() {
         // iPhone 15 Pro
-        addTag(1L, "超视网膜屏幕");
-        addTag(1L, "钛金属设计");
-        addTag(1L, "专业相机系统");
-        addTag(1L, "5G网络");
+        addTag(1L, "super-retina-display");
+        addTag(1L, "titanium-design");
+        addTag(1L, "pro-camera-system");  // shared with Galaxy S24 Ultra → SINTER demo
+        addTag(1L, "5g");
         // MacBook Pro 14"
-        addTag(2L, "M3芯片");
-        addTag(2L, "长效续航");
-        addTag(2L, "专业显示屏");
-        addTag(2L, "轻薄便携");
+        addTag(2L, "m3-chip");
+        addTag(2L, "long-battery-life");  // shared with WH-1000XM5 → SINTER demo
+        addTag(2L, "pro-display");        // shared with LG Monitor → SINTER demo
+        addTag(2L, "thin-and-light");
         // AirPods Pro
-        addTag(3L, "主动降噪");
-        addTag(3L, "空间音频");
-        addTag(3L, "无线充电");
+        addTag(3L, "active-noise-cancellation");  // shared with WH-1000XM5 → SINTER demo
+        addTag(3L, "spatial-audio");
+        addTag(3L, "wireless-charging");
         // Galaxy S24 Ultra
-        addTag(6L, "高分辨率屏幕");
-        addTag(6L, "内置S Pen");
-        addTag(6L, "AI功能");
-        addTag(6L, "专业相机系统");  // shared with iPhone 15 Pro → SINTER demo
+        addTag(6L, "high-resolution-display");
+        addTag(6L, "built-in-s-pen");
+        addTag(6L, "ai-features");
+        addTag(6L, "pro-camera-system");  // shared with iPhone 15 Pro → SINTER demo
         // Sony WH-1000XM5
-        addTag(9L, "主动降噪");      // shared with AirPods Pro → SINTER demo
-        addTag(9L, "高音质");
-        addTag(9L, "舒适佩戴");
-        addTag(9L, "长效续航");
+        addTag(9L, "active-noise-cancellation");  // shared with AirPods Pro → SINTER demo
+        addTag(9L, "hi-res-audio");
+        addTag(9L, "comfortable-fit");
+        addTag(9L, "long-battery-life");  // shared with MacBook Pro → SINTER demo
         // LG 27" 4K Monitor
-        addTag(12L, "画面清晰细腻");
-        addTag(12L, "真彩清晰显示屏");
-        addTag(12L, "流畅至极");
-        addTag(12L, "专业显示屏");    // shared with MacBook Pro → SINTER demo
+        addTag(12L, "sharp-4k-image");
+        addTag(12L, "true-color-display");
+        addTag(12L, "ultra-smooth");
+        addTag(12L, "pro-display");       // shared with MacBook Pro → SINTER demo
     }
 
     /** SADD tags:{productId} tag — idempotent; returns true if the tag was newly added. */

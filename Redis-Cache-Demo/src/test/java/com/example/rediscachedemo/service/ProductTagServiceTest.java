@@ -23,66 +23,66 @@ class ProductTagServiceTest {
     @Test
     void addTagUsesSaddAndReturnsTrueForNewTag() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.add("tags:12", "画面清晰细腻")).thenReturn(1L);
+        when(setOps.add("tags:12", "sharp-4k-image")).thenReturn(1L);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.addTag(12L, "画面清晰细腻")).isTrue();
-        verify(setOps).add("tags:12", "画面清晰细腻");
+        assertThat(service.addTag(12L, "sharp-4k-image")).isTrue();
+        verify(setOps).add("tags:12", "sharp-4k-image");
     }
 
     @Test
     void addTagReturnsFalseForDuplicateTag() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.add("tags:12", "画面清晰细腻")).thenReturn(0L);
+        when(setOps.add("tags:12", "sharp-4k-image")).thenReturn(0L);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.addTag(12L, "画面清晰细腻")).isFalse();
+        assertThat(service.addTag(12L, "sharp-4k-image")).isFalse();
     }
 
     @Test
     void removeTagUsesSremAndReturnsTrueWhenPresent() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.remove("tags:12", (Object) "画面清晰细腻")).thenReturn(1L);
+        when(setOps.remove("tags:12", (Object) "sharp-4k-image")).thenReturn(1L);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.removeTag(12L, "画面清晰细腻")).isTrue();
-        verify(setOps).remove("tags:12", (Object) "画面清晰细腻");
+        assertThat(service.removeTag(12L, "sharp-4k-image")).isTrue();
+        verify(setOps).remove("tags:12", (Object) "sharp-4k-image");
     }
 
     @Test
     void removeTagReturnsFalseWhenTagAbsent() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.remove("tags:12", (Object) "不存在标签")).thenReturn(0L);
+        when(setOps.remove("tags:12", (Object) "nonexistent-tag")).thenReturn(0L);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.removeTag(12L, "不存在标签")).isFalse();
+        assertThat(service.removeTag(12L, "nonexistent-tag")).isFalse();
     }
 
     @Test
     void hasTagUsesSismember() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.isMember("tags:12", "真彩清晰显示屏")).thenReturn(true);
+        when(setOps.isMember("tags:12", "true-color-display")).thenReturn(true);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.hasTag(12L, "真彩清晰显示屏")).isTrue();
-        verify(setOps).isMember("tags:12", "真彩清晰显示屏");
+        assertThat(service.hasTag(12L, "true-color-display")).isTrue();
+        verify(setOps).isMember("tags:12", "true-color-display");
     }
 
     @Test
     void tagsUsesSmembers() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
         when(setOps.members("tags:12"))
-                .thenReturn(Set.of("画面清晰细腻", "真彩清晰显示屏", "流畅至极"));
+                .thenReturn(Set.of("sharp-4k-image", "true-color-display", "ultra-smooth"));
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
         assertThat(service.tags(12L))
-                .containsExactlyInAnyOrder("画面清晰细腻", "真彩清晰显示屏", "流畅至极");
+                .containsExactlyInAnyOrder("sharp-4k-image", "true-color-display", "ultra-smooth");
         verify(setOps).members("tags:12");
     }
 
@@ -110,12 +110,12 @@ class ProductTagServiceTest {
     @Test
     void commonTagsUsesSinter() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        // MacBook Pro (id=2) and LG Monitor (id=12) both have "专业显示屏"
-        when(setOps.intersect("tags:2", "tags:12")).thenReturn(Set.of("专业显示屏"));
+        // MacBook Pro (id=2) and LG Monitor (id=12) both have "pro-display"
+        when(setOps.intersect("tags:2", "tags:12")).thenReturn(Set.of("pro-display"));
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.commonTags(2L, 12L)).containsExactly("专业显示屏");
+        assertThat(service.commonTags(2L, 12L)).containsExactly("pro-display");
         verify(setOps).intersect("tags:2", "tags:12");
     }
 
@@ -132,12 +132,12 @@ class ProductTagServiceTest {
     @Test
     void addTagIsIdempotentSaddDoesNotDoubleCount() {
         when(redisTemplate.opsForSet()).thenReturn(setOps);
-        when(setOps.add("tags:12", "画面清晰细腻")).thenReturn(1L, 0L);
+        when(setOps.add("tags:12", "sharp-4k-image")).thenReturn(1L, 0L);
 
         ProductTagService service = new ProductTagService(redisTemplate);
 
-        assertThat(service.addTag(12L, "画面清晰细腻")).isTrue();
-        assertThat(service.addTag(12L, "画面清晰细腻")).isFalse();
+        assertThat(service.addTag(12L, "sharp-4k-image")).isTrue();
+        assertThat(service.addTag(12L, "sharp-4k-image")).isFalse();
     }
 
     @Test
