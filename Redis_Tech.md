@@ -23,6 +23,27 @@ When using Redis as a cache, you'll often employ a time to live (TTL) on each ke
 
 Using Redis in this fashion doesn't solve one of the more important problems caches face: the "hot key" problem, though Redis is not unique in this respect vs alternatives like Memcached or other highly scaled databases like DynamoDB.
 
+### Redis for Shared Session State
+
+Redis is also a practical shared data layer for short-lived distributed application state. A common example is distributed Session in a horizontally scaled web application: requests for the same user may land on different app instances, but each instance can read and update the same session data in Redis.
+
+In a Spring Boot servlet application, `spring-session-data-redis` replaces the default in-memory `HttpSession` store with Redis:
+
+```xml
+<dependency>
+  <groupId>org.springframework.session</groupId>
+  <artifactId>spring-session-data-redis</artifactId>
+</dependency>
+```
+
+The app then enables Redis-backed sessions and sets a TTL:
+
+```java
+@EnableRedisHttpSession(maxInactiveIntervalInSeconds = 1800)
+```
+
+Typical data stored here includes login user IDs, auth metadata, verification-code state, and small shopping-cart drafts. Keep this data small and expiration-bound. Redis-backed session state improves horizontal scaling and failover compared with local JVM sessions, but it should not become the source of truth for durable business data.
+
 ### Redis as a Distributed Lock
 
 Another common use of Redis in system design settings is as a distributed lock. Occasionally we have data in our system and we need to maintain consistency during updates (e.g. the very common Design Ticketmaster system design question), or we need to make sure multiple people aren't performing an action at the same time (e.g. Design Uber).
@@ -391,4 +412,3 @@ All code, data, and related materials are intended to support independent study,
 If you believe any part of this repository inadvertently includes content that should not be shared publicly or may cause concern, please contact me immediately. I will review and, if necessary, remove the material without delay.
 
 I do not claim ownership of any third-party data or content and have made every effort to respect intellectual property and privacy rights.
-
