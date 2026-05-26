@@ -50,6 +50,25 @@ Another common use of Redis in system design settings is as a distributed lock. 
 
 A very simple distributed lock with a timeout might use the atomic increment (INCR) with a TTL. This is basically a shared counter. When we want to try to acquire the lock, we run INCR. If the response is 1 (i.e. we were the first person to try to grab the lock, so we own it!), we proceed. If the response is > 1 (i.e. someone else beat us and has the lock), we wait and retry again later. When we're done with the lock, we can DEL the key so that other processes can make use of it.
 
+For production-style Redis locks, do not split acquisition into `SETNX` and `EXPIRE`, and do not release with a blind `DEL`:
+
+```java
+Long flag = jedis.setnx(key, "1");
+if (flag == 1) {
+    jedis.expire(key, 10);
+}
+jedis.del(key);
+```
+
+This can leave a permanent lock if the owner crashes between `SETNX` and `EXPIRE`. It can also delete someone else's lock: request A acquires the lock, pauses until the lock expires, request B acquires the same key, and then request A finally calls `DEL`.
+
+A safer single-instance pattern is:
+
+- acquire with one atomic Redis command: `SET lock:key <uuid-token> NX EX <ttl>`
+- store a unique owner token, not a constant value like `"1"`
+- release with Lua compare-and-delete: delete only when `GET lock:key` still equals the owner token
+- renew with Lua compare-and-expire if the critical section can exceed the initial TTL
+
 More sophisticated locks in Redis can use the Redlock algorithm together with fencing tokens if you want an airtight solution.
 
 ### Redis for Leaderboards
