@@ -1,5 +1,6 @@
 package com.example.redislock.controller;
 
+import com.example.redislock.norepeat.NoRepeatSubmit;
 import com.example.redislock.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,7 @@ public class OrderController {
     }
 
     @PostMapping("/orders/{productId}")
+    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
     public ResponseEntity<Map<String, Object>> createOrder(
             @PathVariable Long productId,
             @RequestParam Long userId) {
@@ -43,6 +45,7 @@ public class OrderController {
     }
 
     @PostMapping("/orders/users/{userId}")
+    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
     public ResponseEntity<Map<String, Object>> createUserOrder(@PathVariable Long userId) {
         String message = orderService.createUserOrder(userId);
         return ResponseEntity.ok(Map.of(
@@ -52,6 +55,7 @@ public class OrderController {
     }
 
     @GetMapping("/order/{userId}")
+    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
     public String create(@PathVariable Long userId) {
         return orderService.createUserOrder(userId);
     }
