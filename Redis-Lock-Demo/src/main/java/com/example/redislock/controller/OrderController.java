@@ -31,7 +31,7 @@ public class OrderController {
     }
 
     @PostMapping("/orders/{productId}")
-    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
+    @NoRepeatSubmit(lockTime = 5, message = "Order is being processed. Please do not submit again.")
     public ResponseEntity<Map<String, Object>> createOrder(
             @PathVariable Long productId,
             @RequestParam Long userId) {
@@ -45,7 +45,7 @@ public class OrderController {
     }
 
     @PostMapping("/orders/users/{userId}")
-    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
+    @NoRepeatSubmit(lockTime = 5, message = "Order is being processed. Please do not submit again.")
     public ResponseEntity<Map<String, Object>> createUserOrder(@PathVariable Long userId) {
         String message = orderService.createUserOrder(userId);
         return ResponseEntity.ok(Map.of(
@@ -55,7 +55,7 @@ public class OrderController {
     }
 
     @GetMapping("/order/{userId}")
-    @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
+    @NoRepeatSubmit(lockTime = 5, message = "Order is being processed. Please do not submit again.")
     public String create(@PathVariable Long userId) {
         return orderService.createUserOrder(userId);
     }

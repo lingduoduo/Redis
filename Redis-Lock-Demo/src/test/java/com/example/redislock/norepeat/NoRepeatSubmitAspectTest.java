@@ -60,7 +60,7 @@ class NoRepeatSubmitAspectTest {
 
         assertThatThrownBy(() -> aspect.around(joinPoint, annotation))
                 .isInstanceOf(DuplicateSubmitException.class)
-                .hasMessage("订单正在处理，请勿重复提交");
+                .hasMessage("Order is being processed. Please do not submit again.");
         verify(joinPoint, never()).proceed();
     }
 
@@ -107,7 +107,7 @@ class NoRepeatSubmitAspectTest {
 
     private static final class SampleController {
 
-        @NoRepeatSubmit(lockTime = 5, message = "订单正在处理，请勿重复提交")
+        @NoRepeatSubmit(lockTime = 5, message = "Order is being processed. Please do not submit again.")
         public String createOrder(Long productId) {
             return "ok";
         }

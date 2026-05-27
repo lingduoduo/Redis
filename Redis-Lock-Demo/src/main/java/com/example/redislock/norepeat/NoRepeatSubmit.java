@@ -20,7 +20,7 @@ public @interface NoRepeatSubmit {
     /**
      * Message returned when a duplicate request is blocked.
      */
-    String message() default "操作过于频繁，请稍后再试";
+    String message() default "Too many requests. Please try again later.";
 
     /**
      * Include method arguments in the lock key.
