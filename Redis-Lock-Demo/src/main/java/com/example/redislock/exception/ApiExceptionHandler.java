@@ -1,5 +1,6 @@
 package com.example.redislock.exception;
 
+import com.example.redislock.norepeat.DuplicateSubmitException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleServiceBusy(ServiceBusyException e) {
         log.warn("Service busy: {}", e.getMessage());
         return error(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable", e.getMessage());
+    }
+
+    @ExceptionHandler(DuplicateSubmitException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateSubmit(DuplicateSubmitException e) {
+        log.warn("Duplicate submit: {}", e.getMessage());
+        return error(HttpStatus.TOO_MANY_REQUESTS, "Duplicate submit", e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
